@@ -1,0 +1,106 @@
+name: BEORCHID CI
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: beorchid_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run unit tests
+        run: npm test
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/beorchid-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  notify:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Send CI passed email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "✅ BEORCHID CI Passed — ${{ github.ref_name }} @ ${{ github.sha }}"
+          to: info@medtrack.africa
+          from: BEORCHID CI/CD <${{ secrets.MAIL_USERNAME }}>
+          body: |
+            Tests passed and Docker image built successfully for commit ${{ github.sha }} on branch ${{ github.ref_name }}.
+
+            Pushed by: ${{ github.actor }}
+            Commit: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+            Image: ${{ secrets.DOCKER_USERNAME }}/beorchid-backend:latest
+
+            To deploy, run the CD workflow manually:
+            ${{ github.server_url }}/${{ github.repository }}/actions/workflows/cd.yml
