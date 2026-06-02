@@ -21,9 +21,13 @@ export class CreateChatTables1748880000000 implements MigrationInterface {
       )
     `);
 
-    await queryRunner.query(
-      `CREATE TYPE IF NOT EXISTS "chat_messages_role_enum" AS ENUM ('user', 'assistant')`,
-    );
+    await queryRunner.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'chat_messages_role_enum') THEN
+          CREATE TYPE "chat_messages_role_enum" AS ENUM ('user', 'assistant');
+        END IF;
+      END $$
+    `);
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "chat_messages" (
