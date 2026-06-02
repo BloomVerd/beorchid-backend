@@ -47,6 +47,9 @@ WORKDIR /usr/src/app
 COPY --chown=node:node --from=build /usr/src/app/node_modules ./node_modules
 COPY --chown=node:node --from=build /usr/src/app/dist ./dist
 
+# Explicitly copy email templates since tsc does not copy non-TS files
+COPY --chown=node:node --from=build /usr/src/app/src/modules/email/templates ./dist/modules/email/templates
+
 ENV STAGE=production
 
 CMD [ "node", "dist/main.js" ]
