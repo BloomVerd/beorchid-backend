@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   Post,
   Query,
@@ -108,5 +110,16 @@ export class ChatController {
   async getChats(@Req() req: any) {
     const farmer = req.user as { id: string; email: string };
     return this.chatService.getChats(farmer.id);
+  }
+
+  @Delete(':chatId')
+  @HttpCode(204)
+  @UseGuards(JwtAuthGuard)
+  async deleteChat(
+    @Param('chatId') chatId: string,
+    @Req() req: any,
+  ): Promise<void> {
+    const farmer = req.user as { id: string; email: string };
+    await this.chatService.deleteChat(chatId, farmer.id);
   }
 }

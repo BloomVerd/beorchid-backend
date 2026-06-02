@@ -137,6 +137,16 @@ export class ChatService {
     });
   }
 
+  async deleteChat(chatId: string, farmerId: string): Promise<void> {
+    await this.chatRepo.manager.transaction(async (em) => {
+      const chat = await em.findOne(Chat, {
+        where: { id: chatId, farmer: { id: farmerId } },
+      });
+      if (!chat) throw new NotFoundException('Chat not found');
+      await em.remove(chat);
+    });
+  }
+
   verifyToken(token: string): { id: string; email: string } {
     return this.jwtService.verify(token);
   }
