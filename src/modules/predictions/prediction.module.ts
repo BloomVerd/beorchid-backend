@@ -13,7 +13,7 @@ import { PredictionProducer } from './prediction.producer';
 import { PredictionConsumer } from './prediction.consumer';
 import { FarmerModule } from '../farmer/farmer.module';
 import { FarmModule } from '../farm/farm.module';
-import { JwtStrategy } from 'common/strategies';
+import { JwtStrategy } from 'src/common/strategies';
 
 @Module({
   imports: [

@@ -3,8 +3,8 @@ import { UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterInput } from './inputs/register.input';
 import { AuthPayload, MessageResponse } from './types/auth.types';
-import { GqlJwtAuthGuard } from 'common/guards';
-import { CurrentFarmer } from 'common/decorators';
+import { GqlJwtAuthGuard } from 'src/common/guards';
+import { CurrentFarmer } from 'src/common/decorators';
 import { Farmer } from '../farmer/entities/farmer.entity';
 
 @Resolver()

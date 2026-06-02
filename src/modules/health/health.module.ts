@@ -11,7 +11,7 @@ import { YieldComparison } from './entities/yield-comparison.entity';
 import { HealthResolver } from './health.resolver';
 import { HealthService } from './health.service';
 import { FarmerModule } from '../farmer/farmer.module';
-import { JwtStrategy } from 'common/strategies';
+import { JwtStrategy } from 'src/common/strategies';
 
 @Module({
   imports: [

@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
-import { createDatabase } from 'common/lib/create-db';
+import { createDatabase } from 'src/common/lib/create-db';
 import { graphqlUploadExpress } from 'graphql-upload';
 import { ValidationPipe } from '@nestjs/common';
 

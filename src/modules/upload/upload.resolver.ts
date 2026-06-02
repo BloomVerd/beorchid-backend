@@ -1,7 +1,7 @@
 import { Resolver, Query, Mutation, Args } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { ObjectType, Field } from '@nestjs/graphql';
-import { GqlJwtAuthGuard } from 'common/guards';
+import { GqlJwtAuthGuard } from 'src/common/guards';
 import { UploadService } from './upload.service';
 
 @ObjectType()

@@ -13,7 +13,7 @@ import { MagicLinkToken } from './entities/magic-link-token.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { RegisterInput } from './inputs/register.input';
 import { AuthPayload, MessageResponse } from './types/auth.types';
-import { HashHelper } from 'common/lib';
+import { HashHelper } from 'src/common/lib';
 import { EmailProducer } from '../email/email.producer';
 
 @Injectable()
@@ -35,7 +35,9 @@ export class AuthService {
       where: { email: input.email },
     });
     if (existing) {
-      throw new BadRequestException('An account with this email already exists');
+      throw new BadRequestException(
+        'An account with this email already exists',
+      );
     }
 
     const farmer = this.farmerRepository.create({
@@ -75,7 +77,11 @@ export class AuthService {
     const frontendUrl = this.configService.get<string>('FRONTEND_URL');
     const link = `${frontendUrl}/auth/verify?token=${rawToken}`;
 
-    await this.emailProducer.sendMagicLink({ email, firstName: farmer.firstName, link });
+    await this.emailProducer.sendMagicLink({
+      email,
+      firstName: farmer.firstName,
+      link,
+    });
 
     return { message: 'Magic link sent to your email' };
   }

@@ -1,3 +1,4 @@
+import { join } from 'path';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 
@@ -8,7 +9,8 @@ export const defaultPostgresDBConnection = (
   autoLoadEntities: true,
   synchronize: configService.get('NODE_ENV') !== 'production',
   url: configService.get('DATABASE_URL'),
-  ssl: {
-    rejectUnauthorized: false, // allow self-signed AWS certs
-  },
+  ssl: { rejectUnauthorized: false },
+  migrations: [join(__dirname, '..', '..', 'database', 'migrations', '*.{ts,js}')],
+  migrationsRun: true,
+  migrationsTableName: 'migrations',
 });

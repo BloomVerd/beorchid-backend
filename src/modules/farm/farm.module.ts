@@ -10,13 +10,19 @@ import { PredictionRange } from '../predictions/entities/prediction-range.entity
 import { FarmService } from './farm.service';
 import { FarmResolver } from './farm.resolver';
 import { FarmerModule } from '../farmer/farmer.module';
-import { JwtStrategy } from 'common/strategies';
+import { JwtStrategy } from 'src/common/strategies';
 
 @Module({
   imports: [
     ConfigModule,
     FarmerModule,
-    TypeOrmModule.forFeature([Farm, Coordinate, ImageData, IotDevice, PredictionRange]),
+    TypeOrmModule.forFeature([
+      Farm,
+      Coordinate,
+      ImageData,
+      IotDevice,
+      PredictionRange,
+    ]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

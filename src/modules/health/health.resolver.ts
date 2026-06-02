@@ -3,8 +3,8 @@ import { UseGuards } from '@nestjs/common';
 import { HealthService } from './health.service';
 import { FarmHealth } from './entities/farm-health.entity';
 import { PaginatedFarmHealthSummaries } from './types/health.types';
-import { GqlJwtAuthGuard } from 'common/guards';
-import { CurrentFarmer } from 'common/decorators';
+import { GqlJwtAuthGuard } from 'src/common/guards';
+import { CurrentFarmer } from 'src/common/decorators';
 import { Farmer } from '../farmer/entities/farmer.entity';
 
 @Resolver(() => FarmHealth)

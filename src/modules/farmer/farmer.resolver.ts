@@ -2,8 +2,8 @@ import { Query, Resolver } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { FarmerService } from './farmer.service';
 import { Farmer } from './entities/farmer.entity';
-import { GqlJwtAuthGuard } from 'common/guards';
-import { CurrentFarmer } from 'common/decorators';
+import { GqlJwtAuthGuard } from 'src/common/guards';
+import { CurrentFarmer } from 'src/common/decorators';
 
 @Resolver(() => Farmer)
 export class FarmerResolver {

@@ -49,4 +49,4 @@ COPY --chown=node:node --from=build /usr/src/app/dist ./dist
 
 ENV STAGE=production
 
-CMD [ "node", "dist/src/main.js" ]
+CMD [ "node", "dist/main.js" ]

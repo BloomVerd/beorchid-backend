@@ -8,7 +8,7 @@ import { Farmer } from '../farmer/entities/farmer.entity';
 import { MagicLinkToken } from './entities/magic-link-token.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { EmailProducer } from '../email/email.producer';
-import { HashHelper } from 'common/lib';
+import { HashHelper } from 'src/common/lib';
 
 const makeFarmer = (overrides: Partial<Farmer> = {}): Farmer =>
   ({
@@ -32,9 +32,19 @@ const makeQBChain = (result: any) => ({
 
 describe('AuthService', () => {
   let service: AuthService;
-  let farmerRepo: { findOne: jest.Mock; create: jest.Mock; save: jest.Mock; createQueryBuilder: jest.Mock };
+  let farmerRepo: {
+    findOne: jest.Mock;
+    create: jest.Mock;
+    save: jest.Mock;
+    createQueryBuilder: jest.Mock;
+  };
   let magicLinkRepo: { findOne: jest.Mock; create: jest.Mock; save: jest.Mock };
-  let refreshTokenRepo: { findOne: jest.Mock; create: jest.Mock; save: jest.Mock; delete: jest.Mock };
+  let refreshTokenRepo: {
+    findOne: jest.Mock;
+    create: jest.Mock;
+    save: jest.Mock;
+    delete: jest.Mock;
+  };
   let jwtService: { sign: jest.Mock };
   let configService: { get: jest.Mock };
   let emailProducer: { sendWelcomeEmail: jest.Mock; sendMagicLink: jest.Mock };
@@ -68,8 +78,14 @@ describe('AuthService', () => {
       providers: [
         AuthService,
         { provide: getRepositoryToken(Farmer), useValue: farmerRepo },
-        { provide: getRepositoryToken(MagicLinkToken), useValue: magicLinkRepo },
-        { provide: getRepositoryToken(RefreshToken), useValue: refreshTokenRepo },
+        {
+          provide: getRepositoryToken(MagicLinkToken),
+          useValue: magicLinkRepo,
+        },
+        {
+          provide: getRepositoryToken(RefreshToken),
+          useValue: refreshTokenRepo,
+        },
         { provide: JwtService, useValue: jwtService },
         { provide: ConfigService, useValue: configService },
         { provide: EmailProducer, useValue: emailProducer },
@@ -78,7 +94,9 @@ describe('AuthService', () => {
 
     service = module.get<AuthService>(AuthService);
 
-    jest.spyOn(HashHelper, 'encrypt').mockResolvedValue('hashed_password' as never);
+    jest
+      .spyOn(HashHelper, 'encrypt')
+      .mockResolvedValue('hashed_password' as never);
     jest.spyOn(HashHelper, 'compare').mockResolvedValue(true as never);
   });
 
@@ -90,7 +108,12 @@ describe('AuthService', () => {
       farmerRepo.findOne.mockResolvedValue(null);
       farmerRepo.create.mockReturnValue(farmer);
       farmerRepo.save.mockResolvedValue(farmer);
-      refreshTokenRepo.create.mockReturnValue({ id: 'rt-1', token: 'hashed', expiresAt: new Date(), farmerId: farmer.id });
+      refreshTokenRepo.create.mockReturnValue({
+        id: 'rt-1',
+        token: 'hashed',
+        expiresAt: new Date(),
+        farmerId: farmer.id,
+      });
       refreshTokenRepo.save.mockResolvedValue({});
 
       const result = await service.register({
@@ -101,7 +124,10 @@ describe('AuthService', () => {
         password: 'password123',
       });
 
-      expect(result).toMatchObject({ farmer, accessToken: 'signed_access_token' });
+      expect(result).toMatchObject({
+        farmer,
+        accessToken: 'signed_access_token',
+      });
       expect(result.refreshToken).toBeDefined();
       expect(emailProducer.sendWelcomeEmail).toHaveBeenCalledWith({
         email: farmer.email,
@@ -120,7 +146,9 @@ describe('AuthService', () => {
           country: 'GH',
           password: 'password123',
         }),
-      ).rejects.toThrow(new BadRequestException('An account with this email already exists'));
+      ).rejects.toThrow(
+        new BadRequestException('An account with this email already exists'),
+      );
     });
   });
 
@@ -128,23 +156,34 @@ describe('AuthService', () => {
     it('saves a magic link token and sends email', async () => {
       const farmer = makeFarmer();
       farmerRepo.findOne.mockResolvedValue(farmer);
-      magicLinkRepo.create.mockReturnValue({ id: 'ml-1', email: farmer.email, token: 'hashed', expiresAt: new Date() });
+      magicLinkRepo.create.mockReturnValue({
+        id: 'ml-1',
+        email: farmer.email,
+        token: 'hashed',
+        expiresAt: new Date(),
+      });
       magicLinkRepo.save.mockResolvedValue({});
 
       const result = await service.sendMagicLink('john@example.com');
 
       expect(result).toEqual({ message: 'Magic link sent to your email' });
       expect(emailProducer.sendMagicLink).toHaveBeenCalledWith(
-        expect.objectContaining({ email: farmer.email, firstName: farmer.firstName }),
+        expect.objectContaining({
+          email: farmer.email,
+          firstName: farmer.firstName,
+        }),
       );
-      const callArgs = (emailProducer.sendMagicLink as jest.Mock).mock.calls[0][0];
+      const callArgs = (emailProducer.sendMagicLink as jest.Mock).mock
+        .calls[0][0];
       expect(callArgs.link).toContain('http://localhost:3000');
     });
 
     it('throws BadRequestException for unknown email', async () => {
       farmerRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.sendMagicLink('unknown@example.com')).rejects.toThrow(
+      await expect(
+        service.sendMagicLink('unknown@example.com'),
+      ).rejects.toThrow(
         new BadRequestException('No account found with this email'),
       );
     });
@@ -155,16 +194,28 @@ describe('AuthService', () => {
 
     it('verifies a valid magic link and returns auth payload', async () => {
       const farmer = makeFarmer();
-      const record = { token: 'hashed', email: farmer.email, usedAt: null, expiresAt: futureDate };
+      const record = {
+        token: 'hashed',
+        email: farmer.email,
+        usedAt: null,
+        expiresAt: futureDate,
+      };
       magicLinkRepo.findOne.mockResolvedValue(record);
       magicLinkRepo.save.mockResolvedValue({ ...record, usedAt: new Date() });
       farmerRepo.findOne.mockResolvedValue(farmer);
-      refreshTokenRepo.create.mockReturnValue({ id: 'rt-1', token: 'hashed', expiresAt: new Date() });
+      refreshTokenRepo.create.mockReturnValue({
+        id: 'rt-1',
+        token: 'hashed',
+        expiresAt: new Date(),
+      });
       refreshTokenRepo.save.mockResolvedValue({});
 
       const result = await service.verifyMagicLink('raw_token_value');
 
-      expect(result).toMatchObject({ farmer, accessToken: 'signed_access_token' });
+      expect(result).toMatchObject({
+        farmer,
+        accessToken: 'signed_access_token',
+      });
       expect(magicLinkRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({ usedAt: expect.any(Date) }),
       );
@@ -209,18 +260,30 @@ describe('AuthService', () => {
     it('returns auth payload for correct credentials', async () => {
       const farmer = makeFarmer({ passwordHash: 'hashed_password' } as any);
       farmerRepo.createQueryBuilder.mockReturnValue(makeQBChain(farmer));
-      refreshTokenRepo.create.mockReturnValue({ id: 'rt-1', token: 'hashed', expiresAt: new Date() });
+      refreshTokenRepo.create.mockReturnValue({
+        id: 'rt-1',
+        token: 'hashed',
+        expiresAt: new Date(),
+      });
       refreshTokenRepo.save.mockResolvedValue({});
 
-      const result = await service.loginWithPassword('john@example.com', 'password123');
+      const result = await service.loginWithPassword(
+        'john@example.com',
+        'password123',
+      );
 
-      expect(result).toMatchObject({ farmer, accessToken: 'signed_access_token' });
+      expect(result).toMatchObject({
+        farmer,
+        accessToken: 'signed_access_token',
+      });
     });
 
     it('throws BadRequestException when farmer is not found', async () => {
       farmerRepo.createQueryBuilder.mockReturnValue(makeQBChain(null));
 
-      await expect(service.loginWithPassword('unknown@example.com', 'password')).rejects.toThrow(
+      await expect(
+        service.loginWithPassword('unknown@example.com', 'password'),
+      ).rejects.toThrow(
         new BadRequestException('Email or password is incorrect'),
       );
     });
@@ -230,7 +293,9 @@ describe('AuthService', () => {
       farmerRepo.createQueryBuilder.mockReturnValue(makeQBChain(farmer));
       jest.spyOn(HashHelper, 'compare').mockResolvedValue(false as never);
 
-      await expect(service.loginWithPassword('john@example.com', 'wrong_password')).rejects.toThrow(
+      await expect(
+        service.loginWithPassword('john@example.com', 'wrong_password'),
+      ).rejects.toThrow(
         new BadRequestException('Email or password is incorrect'),
       );
     });
@@ -247,12 +312,19 @@ describe('AuthService', () => {
       };
       refreshTokenRepo.findOne.mockResolvedValue(record);
       refreshTokenRepo.delete.mockResolvedValue({});
-      refreshTokenRepo.create.mockReturnValue({ id: 'rt-2', token: 'new_hashed', expiresAt: new Date() });
+      refreshTokenRepo.create.mockReturnValue({
+        id: 'rt-2',
+        token: 'new_hashed',
+        expiresAt: new Date(),
+      });
       refreshTokenRepo.save.mockResolvedValue({});
 
       const result = await service.refresh('raw_refresh_token');
 
-      expect(result).toMatchObject({ farmer, accessToken: 'signed_access_token' });
+      expect(result).toMatchObject({
+        farmer,
+        accessToken: 'signed_access_token',
+      });
       expect(refreshTokenRepo.delete).toHaveBeenCalledWith('rt-1');
     });
 
@@ -300,26 +372,46 @@ describe('AuthService', () => {
     };
 
     it('creates a new farmer when none exists', async () => {
-      const newFarmer = makeFarmer({ email: googleUser.email, googleId: googleUser.googleId });
+      const newFarmer = makeFarmer({
+        email: googleUser.email,
+        googleId: googleUser.googleId,
+      });
       farmerRepo.findOne.mockResolvedValue(null);
       farmerRepo.create.mockReturnValue(newFarmer);
       farmerRepo.save.mockResolvedValue(newFarmer);
-      refreshTokenRepo.create.mockReturnValue({ id: 'rt-1', token: 'hashed', expiresAt: new Date() });
+      refreshTokenRepo.create.mockReturnValue({
+        id: 'rt-1',
+        token: 'hashed',
+        expiresAt: new Date(),
+      });
       refreshTokenRepo.save.mockResolvedValue({});
 
       const result = await service.handleGoogleLogin(googleUser);
 
       expect(farmerRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ email: googleUser.email, googleId: googleUser.googleId }),
+        expect.objectContaining({
+          email: googleUser.email,
+          googleId: googleUser.googleId,
+        }),
       );
       expect(result).toMatchObject({ accessToken: 'signed_access_token' });
     });
 
     it('links googleId to an existing farmer that does not have one', async () => {
-      const existingFarmer = makeFarmer({ email: googleUser.email, googleId: undefined });
+      const existingFarmer = makeFarmer({
+        email: googleUser.email,
+        googleId: undefined,
+      });
       farmerRepo.findOne.mockResolvedValue(existingFarmer);
-      farmerRepo.save.mockResolvedValue({ ...existingFarmer, googleId: googleUser.googleId });
-      refreshTokenRepo.create.mockReturnValue({ id: 'rt-1', token: 'hashed', expiresAt: new Date() });
+      farmerRepo.save.mockResolvedValue({
+        ...existingFarmer,
+        googleId: googleUser.googleId,
+      });
+      refreshTokenRepo.create.mockReturnValue({
+        id: 'rt-1',
+        token: 'hashed',
+        expiresAt: new Date(),
+      });
       refreshTokenRepo.save.mockResolvedValue({});
 
       await service.handleGoogleLogin(googleUser);
@@ -331,10 +423,17 @@ describe('AuthService', () => {
     });
 
     it('returns existing farmer without re-linking when googleId already set', async () => {
-      const existingFarmer = makeFarmer({ email: googleUser.email, googleId: googleUser.googleId });
+      const existingFarmer = makeFarmer({
+        email: googleUser.email,
+        googleId: googleUser.googleId,
+      });
       farmerRepo.findOne.mockResolvedValue(existingFarmer);
       farmerRepo.save.mockResolvedValue(existingFarmer);
-      refreshTokenRepo.create.mockReturnValue({ id: 'rt-1', token: 'hashed', expiresAt: new Date() });
+      refreshTokenRepo.create.mockReturnValue({
+        id: 'rt-1',
+        token: 'hashed',
+        expiresAt: new Date(),
+      });
       refreshTokenRepo.save.mockResolvedValue({});
 
       await service.handleGoogleLogin(googleUser);

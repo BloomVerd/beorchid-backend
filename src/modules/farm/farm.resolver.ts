@@ -11,8 +11,8 @@ import { UpdateFarmSoilDataInput } from './inputs/update-farm-soil-data.input';
 import { UploadFarmImagesInput } from './inputs/upload-farm-images.input';
 import { RegisterIotDeviceInput } from './inputs/register-iot-device.input';
 import { PaginatedFarms, PaginatedImages } from './types/farm.types';
-import { GqlJwtAuthGuard } from 'common/guards';
-import { CurrentFarmer } from 'common/decorators';
+import { GqlJwtAuthGuard } from 'src/common/guards';
+import { CurrentFarmer } from 'src/common/decorators';
 import { Farmer } from '../farmer/entities/farmer.entity';
 
 @Resolver(() => Farm)

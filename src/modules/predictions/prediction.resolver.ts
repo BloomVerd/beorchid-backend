@@ -3,8 +3,8 @@ import { UseGuards } from '@nestjs/common';
 import { PredictionService } from './prediction.service';
 import { GenerateFarmPredictionResponse } from './types/generate-farm-prediction-response';
 import { PaginatedPredictions } from './types/paginated-predictions';
-import { GqlJwtAuthGuard } from 'common/guards';
-import { CurrentFarmer } from 'common/decorators';
+import { GqlJwtAuthGuard } from 'src/common/guards';
+import { CurrentFarmer } from 'src/common/decorators';
 import { Farmer } from '../farmer/entities/farmer.entity';
 
 @Resolver()

@@ -5,7 +5,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { Farmer } from './entities/farmer.entity';
 import { FarmerService } from './farmer.service';
 import { FarmerResolver } from './farmer.resolver';
-import { JwtStrategy } from 'common/strategies';
+import { JwtStrategy } from 'src/common/strategies';
 
 @Module({
   imports: [
