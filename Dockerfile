@@ -46,7 +46,8 @@ WORKDIR /usr/src/app
 
 COPY --chown=node:node --from=build /usr/src/app/node_modules ./node_modules
 COPY --chown=node:node --from=build /usr/src/app/dist ./dist
+COPY --chown=node:node --from=build /usr/src/app/register-paths.js ./register-paths.js
 
 ENV STAGE=production
 
-CMD [ "node", "dist/main.js" ]
+CMD [ "node", "-r", "./register-paths.js", "dist/src/main.js" ]
