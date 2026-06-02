@@ -10,7 +10,7 @@ export class EmailService {
   private transporter: nodemailer.Transporter;
 
   constructor(private configService: ConfigService) {
-    if (this.configService.get<string>('STAGE') === 'development') {
+    if (this.configService.get<string>('STAGE') === 'production') {
       this.transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {
