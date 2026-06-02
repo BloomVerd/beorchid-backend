@@ -2,7 +2,7 @@ name: BEORCHID CI
 
 on:
   push:
-    branches: ["main"]
+    branches: ['main']
 
 jobs:
   test:
@@ -40,8 +40,8 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
-          cache: "npm"
+          node-version: '22'
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
@@ -92,8 +92,8 @@ jobs:
           secure: true
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
-          subject: "✅ BEORCHID CI Passed — ${{ github.ref_name }} @ ${{ github.sha }}"
-          to: info@medtrack.africa
+          subject: '✅ BEORCHID CI Passed — ${{ github.ref_name }} @ ${{ github.sha }}'
+          to: frederickaziebu1998@gmail.com
           from: BEORCHID CI/CD <${{ secrets.MAIL_USERNAME }}>
           body: |
             Tests passed and Docker image built successfully for commit ${{ github.sha }} on branch ${{ github.ref_name }}.
