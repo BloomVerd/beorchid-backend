@@ -16,7 +16,7 @@ jobs:
       contents: read
 
     env:
-      COMPOSE_PROJECT_NAME: beorchid
+      COMPOSE_PROJECT_NAME: beorchid-backend
 
     steps:
       - name: Check latest CI passed on main
@@ -55,8 +55,8 @@ jobs:
           host: ${{ secrets.EC2_IP }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "docker-compose.yml"
-          target: "~/beorchid-backend"
+          source: 'docker-compose.yml'
+          target: '~/beorchid-backend'
           overwrite: true
 
       - name: Deploy to EC2
@@ -112,17 +112,17 @@ jobs:
 
             # ── 5. Pull latest images ──────────────────────────────────────────
             echo "[4/5] Pulling latest Docker images..."
-            COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME docker compose pull
+            COMPOSE_PROJECT_NAME=${{ env.COMPOSE_PROJECT_NAME }} docker compose pull
 
             # ── 6. Deploy with zero volume disruption ─────────────────────────
             echo "[5/5] Deploying containers..."
 
             # Bring down only app containers — volumes are intentionally untouched
             # NOTE: Never use 'docker compose down -v' as it destroys postgres_data
-            COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME \
+            COMPOSE_PROJECT_NAME=${{ env.COMPOSE_PROJECT_NAME }} \
               docker compose down --remove-orphans --timeout 30
 
-            COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME \
+            COMPOSE_PROJECT_NAME=${{ env.COMPOSE_PROJECT_NAME }} \
               docker compose up -d
 
             # ── 7. Prune unused images to free disk space ──────────────────────
@@ -133,7 +133,7 @@ jobs:
             echo "Waiting for containers to be healthy..."
             sleep 10
 
-            COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME docker compose ps
+            COMPOSE_PROJECT_NAME=${{ env.COMPOSE_PROJECT_NAME }} docker compose ps
 
             echo "Verifying postgres volume..."
             docker volume inspect ${COMPOSE_PROJECT_NAME}_postgres_data \
