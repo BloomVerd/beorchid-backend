@@ -38,6 +38,7 @@ export class ChatService {
           farm: { id: farmId } as Farm,
           farmer: { id: farmerId } as Farmer,
           status: 'processing',
+          title: prompt.slice(0, 60) + (prompt.length > 60 ? '...' : ''),
         });
         await em.save(chat);
       }

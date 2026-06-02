@@ -21,6 +21,9 @@ export class Chat {
   @Column({ type: 'varchar', nullable: true })
   status: ChatStatus | null;
 
+  @Column({ type: 'varchar', nullable: true })
+  title: string | null;
+
   @ManyToOne(() => Farmer, { onDelete: 'CASCADE' })
   farmer: Farmer;
 
