@@ -1,10 +1,12 @@
 import {
   Body,
   Controller,
+  DefaultValuePipe,
   Delete,
   Get,
   HttpCode,
   Param,
+  ParseIntPipe,
   Post,
   Query,
   Req,
@@ -107,9 +109,13 @@ export class ChatController {
 
   @Get()
   @UseGuards(JwtAuthGuard)
-  async getChats(@Req() req: any) {
+  async getChats(
+    @Req() req: any,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+  ) {
     const farmer = req.user as { id: string; email: string };
-    return this.chatService.getChats(farmer.id);
+    return this.chatService.getChats(farmer.id, page, limit);
   }
 
   @Delete(':chatId')

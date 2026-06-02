@@ -130,11 +130,19 @@ export class ChatService {
     });
   }
 
-  async getChats(farmerId: string): Promise<Chat[]> {
-    return this.chatRepo.find({
+  async getChats(
+    farmerId: string,
+    page: number,
+    limit: number,
+  ): Promise<{ data: Chat[]; total: number; page: number; lastPage: number }> {
+    const [data, total] = await this.chatRepo.findAndCount({
       where: { farmer: { id: farmerId } },
+      relations: ['farm'],
       order: { updatedAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
     });
+    return { data, total, page, lastPage: Math.ceil(total / limit) || 1 };
   }
 
   async deleteChat(chatId: string, farmerId: string): Promise<void> {
