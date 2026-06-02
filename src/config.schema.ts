@@ -10,6 +10,8 @@ export const configValidationSchema = Joi.object({
   DB_PASSWORD: Joi.string().required(),
   DB_PORT: Joi.number().required(),
   JWT_SECRET: Joi.string().required(),
+  // allow empty string so a shell env conflict doesn't block startup; Anthropic client validates at call time
+  ANTHROPIC_API_KEY: Joi.string().allow('').optional(),
 
   // Frontend
   FRONTEND_URL: Joi.string().required(),

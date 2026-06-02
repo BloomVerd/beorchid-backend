@@ -24,6 +24,7 @@
     "migration:show": "typeorm-ts-node-commonjs migration:show -d src/database/data-source.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.100.1",
     "@apollo/server": "^5.4.0",
     "@as-integrations/express5": "^1.1.2",
     "@aws-sdk/client-s3": "^3.987.0",

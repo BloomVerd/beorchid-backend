@@ -1,0 +1,57 @@
+import Anthropic from '@anthropic-ai/sdk';
+
+export const CLAUDE_TOOLS: Anthropic.Tool[] = [
+  {
+    name: 'get_farm_health',
+    description:
+      'Retrieve the latest farm health report including overall score, soil health, crop health, weather stress, disease risk, disease alerts, health alerts, and sensor history.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'get_predictions',
+    description: 'Retrieve recent disease and yield predictions for the farm.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        limit: {
+          type: 'number',
+          description: 'Max number of predictions to return (default 10)',
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_iot_devices',
+    description:
+      'List all IoT devices (soil sensors, weather stations, cameras, etc.) registered on the farm and their active status.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'get_farm_details',
+    description:
+      'Get farm metadata: name, crop type, variety, farm size, soil type, farm type, and coordinates.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+];
+
+export interface ChatSseEvent {
+  type: 'token' | 'tool_use' | 'done' | 'error';
+  chatId: string;
+  delta?: string;
+  toolName?: string;
+  messageId?: string;
+  message?: string;
+}
