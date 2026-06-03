@@ -11,6 +11,7 @@ import { Farm } from '../farm/entities/farm.entity';
 import { ImageData } from '../farm/entities/image-data.entity';
 import { Farmer } from '../farmer/entities/farmer.entity';
 import { PredictionProducer } from './prediction.producer';
+import { FarmerSettingsService } from '../farmer/farmer-settings.service';
 import { GenerateFarmPredictionResponse } from './types/generate-farm-prediction-response';
 import { PaginatedPredictions } from './types/paginated-predictions';
 
@@ -20,6 +21,7 @@ export class PredictionService {
     @InjectRepository(Prediction)
     private predictionRepository: Repository<Prediction>,
     private readonly predictionProducer: PredictionProducer,
+    private readonly farmerSettingsService: FarmerSettingsService,
   ) {}
 
   async generateFarmPredictions(
@@ -56,10 +58,12 @@ export class PredictionService {
         where: { farm: { id: farmId }, inserted_at: Between(weekStart, weekEnd) },
       });
 
+      const settings = await this.farmerSettingsService.getOrCreate(farmer.id);
+
       if (range) {
-        if (range.regeneration_count >= 3) {
+        if (range.regeneration_count >= settings.predictionWeeklyLimit) {
           throw new BadRequestException(
-            'You have exhausted your 3 predictions for this week',
+            `You have exhausted your ${settings.predictionWeeklyLimit} predictions for this week`,
           );
         }
         range.regeneration_count += 1;

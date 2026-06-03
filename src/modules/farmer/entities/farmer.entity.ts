@@ -3,10 +3,12 @@ import {
   CreateDateColumn,
   Entity,
   OneToMany,
+  OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { Field, ID, ObjectType } from '@nestjs/graphql';
+import { FarmerSettings } from './farmer-settings.entity';
 
 @ObjectType()
 @Entity('farmers')
@@ -50,4 +52,8 @@ export class Farmer {
 
   @OneToMany('Farm', 'farmer')
   farms: any[];
+
+  @Field(() => FarmerSettings, { nullable: true })
+  @OneToOne(() => FarmerSettings, (s) => s.farmer, { nullable: true })
+  settings?: FarmerSettings;
 }

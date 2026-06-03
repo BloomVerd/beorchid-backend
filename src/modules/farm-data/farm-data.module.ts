@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule } from '@nestjs/config';
+import { FarmerModule } from '../farmer/farmer.module';
 import { Farm } from '../farm/entities/farm.entity';
 import { FarmHealth } from '../health/entities/farm-health.entity';
 import { IotDevice } from '../farm/entities/iot-device.entity';
@@ -15,6 +16,7 @@ import { FarmDataConsumer } from './farm-data.consumer';
 @Module({
   imports: [
     ConfigModule,
+    FarmerModule,
     BullModule.registerQueue({ name: 'farm-data-queue' }),
     TypeOrmModule.forFeature([
       Farm,

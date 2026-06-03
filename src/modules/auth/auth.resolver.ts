@@ -2,6 +2,7 @@ import { Args, Mutation, Resolver } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterInput } from './inputs/register.input';
+import { ChangePasswordInput } from './inputs/change-password.input';
 import { AuthPayload, MessageResponse } from './types/auth.types';
 import { GqlJwtAuthGuard } from 'src/common/guards';
 import { CurrentFarmer } from 'src/common/decorators';
@@ -46,5 +47,14 @@ export class AuthResolver {
     @CurrentFarmer() _farmer: Farmer,
   ) {
     return this.authService.logout(refreshToken);
+  }
+
+  @Mutation(() => MessageResponse)
+  @UseGuards(GqlJwtAuthGuard)
+  changePassword(
+    @Args('input') input: ChangePasswordInput,
+    @CurrentFarmer() farmer: Farmer,
+  ) {
+    return this.authService.changePassword(farmer.id, input);
   }
 }

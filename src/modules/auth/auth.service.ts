@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -12,6 +13,7 @@ import { Farmer } from '../farmer/entities/farmer.entity';
 import { MagicLinkToken } from './entities/magic-link-token.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { RegisterInput } from './inputs/register.input';
+import { ChangePasswordInput } from './inputs/change-password.input';
 import { AuthPayload, MessageResponse } from './types/auth.types';
 import { HashHelper } from 'src/common/lib';
 import { EmailProducer } from '../email/email.producer';
@@ -157,6 +159,37 @@ export class AuthService {
     const hashedToken = this.hashToken(rawRefreshToken);
     await this.refreshTokenRepository.delete({ token: hashedToken });
     return { message: 'Logged out successfully' };
+  }
+
+  async changePassword(
+    farmerId: string,
+    input: ChangePasswordInput,
+  ): Promise<MessageResponse> {
+    const farmer = await this.farmerRepository
+      .createQueryBuilder('farmer')
+      .addSelect('farmer.passwordHash')
+      .where('farmer.id = :id', { id: farmerId })
+      .getOne();
+
+    if (!farmer) throw new NotFoundException('Farmer not found');
+
+    if (!farmer.passwordHash) {
+      throw new BadRequestException(
+        'Your account uses social login — set a password via account settings first',
+      );
+    }
+
+    const valid = await HashHelper.compare(
+      input.currentPassword,
+      farmer.passwordHash,
+    );
+    if (!valid) {
+      throw new BadRequestException('Current password is incorrect');
+    }
+
+    farmer.passwordHash = await HashHelper.encrypt(input.newPassword);
+    await this.farmerRepository.save(farmer);
+    return { message: 'Password updated successfully' };
   }
 
   async handleGoogleLogin(googleUser: {

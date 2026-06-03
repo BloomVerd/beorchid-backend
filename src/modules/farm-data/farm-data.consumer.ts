@@ -10,6 +10,7 @@ import { IotDevice } from '../farm/entities/iot-device.entity';
 import { SensorHistoryPoint } from '../health/entities/sensor-history-point.entity';
 import { YieldComparison } from '../health/entities/yield-comparison.entity';
 import { FarmDataService } from './farm-data.service';
+import { FarmerSettingsService } from '../farmer/farmer-settings.service';
 import {
   IrrigationSection,
   SensorReading,
@@ -51,6 +52,7 @@ export class FarmDataConsumer extends WorkerHost {
   constructor(
     private readonly configService: ConfigService,
     private readonly farmDataService: FarmDataService,
+    private readonly farmerSettingsService: FarmerSettingsService,
     @InjectRepository(Farm) private readonly farmRepo: Repository<Farm>,
     @InjectRepository(FarmHealth)
     private readonly farmHealthRepo: Repository<FarmHealth>,
@@ -73,9 +75,18 @@ export class FarmDataConsumer extends WorkerHost {
     const { farmId } = job.data as { farmId: string };
 
     try {
-      const [farm, health, iotDevices, recentSensors, yieldComparisons] =
+      const farm = await this.farmRepo.findOne({
+        where: { id: farmId },
+        relations: ['farmer'],
+      });
+      const settings = farm?.farmer
+        ? await this.farmerSettingsService.getOrCreate(farm.farmer.id)
+        : null;
+      const lookbackMs =
+        (settings?.farmDataLookbackHours ?? 1) * 3_600_000;
+
+      const [health, iotDevices, recentSensors, yieldComparisons] =
         await Promise.all([
-          this.farmRepo.findOne({ where: { id: farmId } }),
           this.farmHealthRepo.findOne({
             where: { farm: { id: farmId } },
             relations: ['disease_alerts', 'health_alerts'],
@@ -85,9 +96,7 @@ export class FarmDataConsumer extends WorkerHost {
           this.sensorRepo.find({
             where: {
               farmHealth: { farm: { id: farmId } },
-              createdAt: MoreThanOrEqual(
-                new Date(Date.now() - 3600_000),
-              ),
+              createdAt: MoreThanOrEqual(new Date(Date.now() - lookbackMs)),
             },
             order: { createdAt: 'DESC' },
           }),
@@ -131,12 +140,16 @@ export class FarmDataConsumer extends WorkerHost {
         ? this.mapYieldSection(parsed.yield)
         : undefined;
 
-      await this.farmDataService.cacheResult(farmId, {
-        generated_at: new Date().toISOString(),
-        sensors,
-        irrigation,
-        yield: yieldSection,
-      });
+      await this.farmDataService.cacheResult(
+        farmId,
+        {
+          generated_at: new Date().toISOString(),
+          sensors,
+          irrigation,
+          yield: yieldSection,
+        },
+        settings?.farmDataCacheTtlSeconds ?? 3600,
+      );
     } catch {
       await this.farmDataService.clearPending(farmId);
     }

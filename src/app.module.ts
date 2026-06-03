@@ -4,6 +4,7 @@ import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
+import { ScheduleModule } from '@nestjs/schedule';
 import { configValidationSchema } from './config.schema';
 import { defaultPostgresDBConnection } from 'src/common/config/postgres.config';
 import { defaultRedisDBConnection } from 'src/common/config/redis.config';
@@ -45,6 +46,7 @@ import { FarmDataModule } from './modules/farm-data/farm-data.module';
       inject: [ConfigService],
       useFactory: defaultRedisDBConnection,
     }),
+    ScheduleModule.forRoot(),
     AuthModule,
     FarmerModule,
     FarmModule,

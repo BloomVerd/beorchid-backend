@@ -52,12 +52,16 @@ export class FarmDataService implements OnModuleInit, OnModuleDestroy {
     return { status: FarmDataStatus.PENDING };
   }
 
-  async cacheResult(farmId: string, data: CachedFarmData): Promise<void> {
+  async cacheResult(
+    farmId: string,
+    data: CachedFarmData,
+    ttlSeconds = 3600,
+  ): Promise<void> {
     await this.redis.set(
       `farm_data:${farmId}`,
       JSON.stringify(data),
       'EX',
-      3600,
+      ttlSeconds,
     );
     await this.redis.del(`farm_data_pending:${farmId}`);
   }

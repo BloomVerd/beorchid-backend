@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { FarmHealth } from './entities/farm-health.entity';
@@ -10,13 +11,19 @@ import { SensorHistoryPoint } from './entities/sensor-history-point.entity';
 import { YieldComparison } from './entities/yield-comparison.entity';
 import { HealthResolver } from './health.resolver';
 import { HealthService } from './health.service';
+import { HealthProducer } from './health.producer';
+import { HealthScheduler } from './health.scheduler';
+import { HealthConsumer } from './health.consumer';
 import { FarmerModule } from '../farmer/farmer.module';
+import { FarmModule } from '../farm/farm.module';
 import { JwtStrategy } from 'src/common/strategies';
 
 @Module({
   imports: [
     ConfigModule,
     FarmerModule,
+    FarmModule,
+    BullModule.registerQueue({ name: 'health-queue' }),
     TypeOrmModule.forFeature([
       FarmHealth,
       CropFieldHealth,
@@ -34,7 +41,14 @@ import { JwtStrategy } from 'src/common/strategies';
       }),
     }),
   ],
-  providers: [HealthResolver, HealthService, JwtStrategy],
+  providers: [
+    HealthResolver,
+    HealthService,
+    HealthProducer,
+    HealthScheduler,
+    HealthConsumer,
+    JwtStrategy,
+  ],
   exports: [HealthService],
 })
 export class HealthModule {}
