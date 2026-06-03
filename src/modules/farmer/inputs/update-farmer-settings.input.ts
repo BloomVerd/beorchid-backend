@@ -6,23 +6,23 @@ export class UpdateFarmerSettingsInput {
   @Field(() => Int, { nullable: true })
   @IsOptional()
   @IsInt()
-  @Min(1)
-  @Max(168)
-  farmDataLookbackHours?: number;
+  @Min(30)
+  @Max(604800)
+  farmDataLookbackSeconds?: number;
 
   @Field(() => Int, { nullable: true })
   @IsOptional()
   @IsInt()
-  @Min(60)
+  @Min(30)
   @Max(86400)
   farmDataCacheTtlSeconds?: number;
 
   @Field(() => Int, { nullable: true })
   @IsOptional()
   @IsInt()
-  @Min(1)
-  @Max(24)
-  healthReportIntervalHours?: number;
+  @Min(30)
+  @Max(86400)
+  healthReportIntervalSeconds?: number;
 
   @Field(() => Int, { nullable: true })
   @IsOptional()

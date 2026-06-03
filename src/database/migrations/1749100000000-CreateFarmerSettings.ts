@@ -5,9 +5,9 @@ export class CreateFarmerSettings1749100000000 implements MigrationInterface {
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "farmer_settings" (
         "id"                          UUID          NOT NULL DEFAULT uuid_generate_v4(),
-        "farmDataLookbackHours"       INTEGER       NOT NULL DEFAULT 1,
-        "farmDataCacheTtlSeconds"     INTEGER       NOT NULL DEFAULT 3600,
-        "healthReportIntervalHours"   INTEGER       NOT NULL DEFAULT 1,
+        "farmDataLookbackSeconds"      INTEGER       NOT NULL DEFAULT 3600,
+        "farmDataCacheTtlSeconds"      INTEGER       NOT NULL DEFAULT 3600,
+        "healthReportIntervalSeconds"  INTEGER       NOT NULL DEFAULT 3600,
         "predictionWeeklyLimit"       INTEGER       NOT NULL DEFAULT 3,
         "createdAt"                   TIMESTAMPTZ   NOT NULL DEFAULT now(),
         "updatedAt"                   TIMESTAMPTZ   NOT NULL DEFAULT now(),

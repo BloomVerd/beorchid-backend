@@ -60,9 +60,9 @@ const makeYield = (): YieldComparison =>
 
 const makeSettings = (overrides: Partial<FarmerSettings> = {}): FarmerSettings =>
   ({
-    farmDataLookbackHours: 1,
+    farmDataLookbackSeconds: 3600,
     farmDataCacheTtlSeconds: 3600,
-    healthReportIntervalHours: 1,
+    healthReportIntervalSeconds: 3600,
     predictionWeeklyLimit: 3,
     ...overrides,
   }) as FarmerSettings;
@@ -166,9 +166,9 @@ describe('FarmDataConsumer', () => {
       );
     });
 
-    it('uses settings lookback hours for DynamoDB query', async () => {
+    it('uses settings lookback seconds for DynamoDB query', async () => {
       farmerSettingsService.getOrCreate.mockResolvedValue(
-        makeSettings({ farmDataLookbackHours: 3 }),
+        makeSettings({ farmDataLookbackSeconds: 120 }),
       );
       anthropicCreate.mockResolvedValue(makeClaudeResponse({}));
 
@@ -176,7 +176,7 @@ describe('FarmDataConsumer', () => {
 
       const queryArg = dynamodbSend.mock.calls[0][0].input;
       const since = new Date(queryArg.ExpressionAttributeValues[':since']);
-      const expectedSince = new Date(Date.now() - 3 * 3_600_000);
+      const expectedSince = new Date(Date.now() - 120 * 1000);
       expect(Math.abs(since.getTime() - expectedSince.getTime())).toBeLessThan(5000);
     });
 

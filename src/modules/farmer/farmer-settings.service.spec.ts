@@ -6,9 +6,9 @@ import { FarmerSettings } from './entities/farmer-settings.entity';
 const makeSettings = (overrides: Partial<FarmerSettings> = {}): FarmerSettings =>
   ({
     id: 'settings-1',
-    farmDataLookbackHours: 1,
+    farmDataLookbackSeconds: 3600,
     farmDataCacheTtlSeconds: 3600,
-    healthReportIntervalHours: 1,
+    healthReportIntervalSeconds: 3600,
     predictionWeeklyLimit: 3,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -67,9 +67,9 @@ describe('FarmerSettingsService', () => {
         farmer: { id: 'farmer-1' },
       });
       expect(settingsRepo.save).toHaveBeenCalledWith(newSettings);
-      expect(result.farmDataLookbackHours).toBe(1);
+      expect(result.farmDataLookbackSeconds).toBe(3600);
       expect(result.farmDataCacheTtlSeconds).toBe(3600);
-      expect(result.healthReportIntervalHours).toBe(1);
+      expect(result.healthReportIntervalSeconds).toBe(3600);
       expect(result.predictionWeeklyLimit).toBe(3);
     });
   });
@@ -77,23 +77,23 @@ describe('FarmerSettingsService', () => {
   describe('update', () => {
     it('merges input fields into existing settings and saves', async () => {
       const existing = makeSettings();
-      const updated = makeSettings({ farmDataLookbackHours: 4, farmDataCacheTtlSeconds: 7200 });
+      const updated = makeSettings({ farmDataLookbackSeconds: 4, farmDataCacheTtlSeconds: 7200 });
       settingsRepo.findOne.mockResolvedValue(existing);
       settingsRepo.create.mockReturnValue(existing);
       settingsRepo.save.mockResolvedValue(updated);
 
       const result = await service.update('farmer-1', {
-        farmDataLookbackHours: 4,
+        farmDataLookbackSeconds: 4,
         farmDataCacheTtlSeconds: 7200,
       });
 
       expect(settingsRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({
-          farmDataLookbackHours: 4,
+          farmDataLookbackSeconds: 4,
           farmDataCacheTtlSeconds: 7200,
         }),
       );
-      expect(result.farmDataLookbackHours).toBe(4);
+      expect(result.farmDataLookbackSeconds).toBe(4);
       expect(result.farmDataCacheTtlSeconds).toBe(7200);
     });
 
@@ -104,11 +104,28 @@ describe('FarmerSettingsService', () => {
       settingsRepo.save.mockImplementation((s) => Promise.resolve(s));
 
       const result = await service.update('farmer-1', {
-        farmDataLookbackHours: 2,
+        farmDataLookbackSeconds: 2,
       });
 
       expect(result.predictionWeeklyLimit).toBe(5);
-      expect(result.farmDataLookbackHours).toBe(2);
+      expect(result.farmDataLookbackSeconds).toBe(2);
+    });
+
+    it('ignores null fields so existing values are not overwritten', async () => {
+      const existing = makeSettings({ farmDataLookbackSeconds: 2, farmDataCacheTtlSeconds: 7200 });
+      settingsRepo.findOne.mockResolvedValue(existing);
+      settingsRepo.create.mockReturnValue(existing);
+      settingsRepo.save.mockImplementation((s) => Promise.resolve(s));
+
+      const result = await service.update('farmer-1', {
+        farmDataLookbackSeconds: null as any,
+        farmDataCacheTtlSeconds: null as any,
+        healthReportIntervalSeconds: null as any,
+        predictionWeeklyLimit: null as any,
+      });
+
+      expect(result.farmDataLookbackSeconds).toBe(2);
+      expect(result.farmDataCacheTtlSeconds).toBe(7200);
     });
   });
 });

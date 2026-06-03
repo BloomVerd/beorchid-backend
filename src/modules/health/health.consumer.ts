@@ -251,9 +251,9 @@ export class HealthConsumer extends WorkerHost {
 
   private async queryTelemetry(
     farmId: string,
-    lookbackHours: number,
+    lookbackSeconds: number,
   ): Promise<TelemetryItem[]> {
-    const since = new Date(Date.now() - lookbackHours * 3_600_000).toISOString();
+    const since = new Date(Date.now() - lookbackSeconds * 1000).toISOString();
     const result = await this.dynamodb.send(
       new QueryCommand({
         TableName: 'farm_telemetry',

@@ -55,7 +55,10 @@ export class PredictionService {
       weekEnd.setHours(23, 59, 59, 999);
 
       const range = await em.findOne(PredictionRange, {
-        where: { farm: { id: farmId }, inserted_at: Between(weekStart, weekEnd) },
+        where: {
+          farm: { id: farmId },
+          inserted_at: Between(weekStart, weekEnd),
+        },
       });
 
       const settings = await this.farmerSettingsService.getOrCreate(farmer.id);

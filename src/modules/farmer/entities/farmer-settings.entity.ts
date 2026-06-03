@@ -18,16 +18,16 @@ export class FarmerSettings {
   id: string;
 
   @Field(() => Int)
-  @Column({ type: 'int', default: 1 })
-  farmDataLookbackHours: number;
+  @Column({ type: 'int', default: 3600 })
+  farmDataLookbackSeconds: number;
 
   @Field(() => Int)
   @Column({ type: 'int', default: 3600 })
   farmDataCacheTtlSeconds: number;
 
   @Field(() => Int)
-  @Column({ type: 'int', default: 1 })
-  healthReportIntervalHours: number;
+  @Column({ type: 'int', default: 3600 })
+  healthReportIntervalSeconds: number;
 
   @Field(() => Int)
   @Column({ type: 'int', default: 3 })

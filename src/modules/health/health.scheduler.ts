@@ -47,7 +47,7 @@ export class HealthScheduler {
       const settings = await this.farmerSettingsService.getOrCreate(
         farm.farmer.id,
       );
-      const intervalMs = settings.healthReportIntervalHours * 3_600_000;
+      const intervalMs = settings.healthReportIntervalSeconds * 1000;
       const lastComputed = healthMap.get(farm.id);
       const isStale =
         !lastComputed ||

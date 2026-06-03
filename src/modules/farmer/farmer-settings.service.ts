@@ -30,7 +30,10 @@ export class FarmerSettingsService {
     input: UpdateFarmerSettingsInput,
   ): Promise<FarmerSettings> {
     const settings = await this.getOrCreate(farmerId);
-    Object.assign(settings, input);
+    const patch = Object.fromEntries(
+      Object.entries(input).filter(([, v]) => v != null),
+    );
+    Object.assign(settings, patch);
     return this.settingsRepo.save(settings);
   }
 }

@@ -10,8 +10,8 @@ import { FarmerSettings } from '../farmer/entities/farmer-settings.entity';
 const makeFarm = (id: string, farmerId = 'farmer-1'): Farm =>
   ({ id, farmer: { id: farmerId } }) as any as Farm;
 
-const makeSettings = (healthReportIntervalHours = 1): FarmerSettings =>
-  ({ healthReportIntervalHours }) as FarmerSettings;
+const makeSettings = (healthReportIntervalSeconds = 3600): FarmerSettings =>
+  ({ healthReportIntervalSeconds }) as FarmerSettings;
 
 const makeQBChain = (rawRows: Array<{ farmId: string; lastComputedAt: string | null }>) => ({
   select: jest.fn().mockReturnThis(),
@@ -72,7 +72,7 @@ describe('HealthScheduler', () => {
     farmHealthRepo.createQueryBuilder.mockReturnValue(
       makeQBChain([{ farmId: 'farm-1', lastComputedAt: twoHoursAgo }]),
     );
-    farmerSettingsService.getOrCreate.mockResolvedValue(makeSettings(1));
+    farmerSettingsService.getOrCreate.mockResolvedValue(makeSettings(3600)); // 1h interval
 
     await scheduler.schedulePendingHealthComputes();
 
@@ -80,12 +80,12 @@ describe('HealthScheduler', () => {
   });
 
   it('skips a farm whose last health is within the interval', async () => {
-    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60_000).toISOString();
+    const thirtySecondsAgo = new Date(Date.now() - 30_000).toISOString();
     farmRepo.find.mockResolvedValue([makeFarm('farm-1')]);
     farmHealthRepo.createQueryBuilder.mockReturnValue(
-      makeQBChain([{ farmId: 'farm-1', lastComputedAt: thirtyMinutesAgo }]),
+      makeQBChain([{ farmId: 'farm-1', lastComputedAt: thirtySecondsAgo }]),
     );
-    farmerSettingsService.getOrCreate.mockResolvedValue(makeSettings(1));
+    farmerSettingsService.getOrCreate.mockResolvedValue(makeSettings(3600)); // 1h interval
 
     await scheduler.schedulePendingHealthComputes();
 
@@ -106,16 +106,16 @@ describe('HealthScheduler', () => {
   });
 
   it('does not enqueue when all farms are fresh', async () => {
-    const tenMinutesAgo = new Date(Date.now() - 10 * 60_000).toISOString();
+    const tenSecondsAgo = new Date(Date.now() - 10_000).toISOString();
     const farms = [makeFarm('farm-1'), makeFarm('farm-2')];
     farmRepo.find.mockResolvedValue(farms);
     farmHealthRepo.createQueryBuilder.mockReturnValue(
       makeQBChain([
-        { farmId: 'farm-1', lastComputedAt: tenMinutesAgo },
-        { farmId: 'farm-2', lastComputedAt: tenMinutesAgo },
+        { farmId: 'farm-1', lastComputedAt: tenSecondsAgo },
+        { farmId: 'farm-2', lastComputedAt: tenSecondsAgo },
       ]),
     );
-    farmerSettingsService.getOrCreate.mockResolvedValue(makeSettings(1));
+    farmerSettingsService.getOrCreate.mockResolvedValue(makeSettings(3600));
 
     await scheduler.schedulePendingHealthComputes();
 
