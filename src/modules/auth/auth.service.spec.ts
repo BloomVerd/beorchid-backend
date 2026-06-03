@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Farmer } from '../farmer/entities/farmer.entity';
 import { MagicLinkToken } from './entities/magic-link-token.entity';
@@ -360,6 +360,57 @@ describe('AuthService', () => {
       expect(refreshTokenRepo.delete).toHaveBeenCalledWith(
         expect.objectContaining({ token: expect.any(String) }),
       );
+    });
+  });
+
+  describe('changePassword', () => {
+    const input = { currentPassword: 'oldPass123', newPassword: 'newPass456' };
+
+    it('updates password hash when current password is correct', async () => {
+      const farmer = makeFarmer({ passwordHash: 'hashed_old' } as any);
+      farmerRepo.createQueryBuilder.mockReturnValue(makeQBChain(farmer));
+      farmerRepo.save.mockResolvedValue(farmer);
+
+      const result = await service.changePassword(farmer.id, input);
+
+      expect(result).toEqual({ message: 'Password updated successfully' });
+      expect(farmerRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ passwordHash: 'hashed_password' }),
+      );
+    });
+
+    it('throws NotFoundException when farmer is not found', async () => {
+      farmerRepo.createQueryBuilder.mockReturnValue(makeQBChain(null));
+
+      await expect(
+        service.changePassword('nonexistent-id', input),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws BadRequestException for OAuth-only account with no password', async () => {
+      const farmer = makeFarmer({ passwordHash: undefined } as any);
+      farmerRepo.createQueryBuilder.mockReturnValue(makeQBChain(farmer));
+
+      await expect(
+        service.changePassword(farmer.id, input),
+      ).rejects.toThrow(
+        new BadRequestException(
+          'Your account uses social login — set a password via account settings first',
+        ),
+      );
+    });
+
+    it('throws BadRequestException when current password is wrong', async () => {
+      const farmer = makeFarmer({ passwordHash: 'hashed_old' } as any);
+      farmerRepo.createQueryBuilder.mockReturnValue(makeQBChain(farmer));
+      jest.spyOn(HashHelper, 'compare').mockResolvedValue(false as never);
+
+      await expect(
+        service.changePassword(farmer.id, input),
+      ).rejects.toThrow(
+        new BadRequestException('Current password is incorrect'),
+      );
+      expect(farmerRepo.save).not.toHaveBeenCalled();
     });
   });
 

@@ -4,6 +4,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PredictionService } from './prediction.service';
 import { Prediction } from './entities/prediction.entity';
 import { PredictionProducer } from './prediction.producer';
+import { FarmerSettingsService } from '../farmer/farmer-settings.service';
 import { PredictionType } from '../farm/entities/image-data.entity';
 
 const makeFarmer = (overrides = {}) => ({
@@ -51,6 +52,7 @@ describe('PredictionService', () => {
     };
   };
   let predictionProducer: { createPrediction: jest.Mock };
+  let farmerSettingsService: { getOrCreate: jest.Mock };
   let mockEm: { findOne: jest.Mock; save: jest.Mock; create: jest.Mock };
 
   beforeEach(async () => {
@@ -74,12 +76,16 @@ describe('PredictionService', () => {
     predictionProducer = {
       createPrediction: jest.fn().mockResolvedValue(undefined),
     };
+    farmerSettingsService = {
+      getOrCreate: jest.fn().mockResolvedValue({ predictionWeeklyLimit: 3 }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PredictionService,
         { provide: getRepositoryToken(Prediction), useValue: predictionRepo },
         { provide: PredictionProducer, useValue: predictionProducer },
+        { provide: FarmerSettingsService, useValue: farmerSettingsService },
       ],
     }).compile();
 

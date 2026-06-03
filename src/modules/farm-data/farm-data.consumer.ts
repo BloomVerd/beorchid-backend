@@ -1,13 +1,14 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThanOrEqual } from 'typeorm';
+import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import Anthropic from '@anthropic-ai/sdk';
+import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { createDynamoDBClient } from 'src/common/config/dynamodb.config';
 import { Farm } from '../farm/entities/farm.entity';
 import { FarmHealth } from '../health/entities/farm-health.entity';
 import { IotDevice } from '../farm/entities/iot-device.entity';
-import { SensorHistoryPoint } from '../health/entities/sensor-history-point.entity';
 import { YieldComparison } from '../health/entities/yield-comparison.entity';
 import { FarmDataService } from './farm-data.service';
 import { FarmerSettingsService } from '../farmer/farmer-settings.service';
@@ -17,6 +18,16 @@ import {
   SensorSection,
   YieldSection,
 } from './types/farm-data.types';
+
+interface TelemetryItem {
+  farm_id: string;
+  timestamp: string;
+  device_id?: string;
+  humidity?: number;
+  ph?: number;
+  soil_moisture?: number;
+  temperature?: number;
+}
 
 interface FarmDataJson {
   sensors?: {
@@ -48,6 +59,7 @@ interface FarmDataJson {
 @Processor('farm-data-queue')
 export class FarmDataConsumer extends WorkerHost {
   private readonly anthropic: Anthropic;
+  private readonly dynamodb: DynamoDBDocumentClient;
 
   constructor(
     private readonly configService: ConfigService,
@@ -58,8 +70,6 @@ export class FarmDataConsumer extends WorkerHost {
     private readonly farmHealthRepo: Repository<FarmHealth>,
     @InjectRepository(IotDevice)
     private readonly iotDeviceRepo: Repository<IotDevice>,
-    @InjectRepository(SensorHistoryPoint)
-    private readonly sensorRepo: Repository<SensorHistoryPoint>,
     @InjectRepository(YieldComparison)
     private readonly yieldRepo: Repository<YieldComparison>,
   ) {
@@ -67,6 +77,7 @@ export class FarmDataConsumer extends WorkerHost {
     this.anthropic = new Anthropic({
       apiKey: this.configService.get<string>('ANTHROPIC_API_KEY'),
     });
+    this.dynamodb = createDynamoDBClient(this.configService);
   }
 
   async process(job: Job): Promise<void> {
@@ -82,10 +93,8 @@ export class FarmDataConsumer extends WorkerHost {
       const settings = farm?.farmer
         ? await this.farmerSettingsService.getOrCreate(farm.farmer.id)
         : null;
-      const lookbackMs =
-        (settings?.farmDataLookbackHours ?? 1) * 3_600_000;
 
-      const [health, iotDevices, recentSensors, yieldComparisons] =
+      const [health, iotDevices, telemetry, yieldComparisons] =
         await Promise.all([
           this.farmHealthRepo.findOne({
             where: { farm: { id: farmId } },
@@ -93,13 +102,7 @@ export class FarmDataConsumer extends WorkerHost {
             order: { computed_at: 'DESC' },
           }),
           this.iotDeviceRepo.find({ where: { farm: { id: farmId } } }),
-          this.sensorRepo.find({
-            where: {
-              farmHealth: { farm: { id: farmId } },
-              createdAt: MoreThanOrEqual(new Date(Date.now() - lookbackMs)),
-            },
-            order: { createdAt: 'DESC' },
-          }),
+          this.queryTelemetry(farmId, settings?.farmDataLookbackHours ?? 1),
           this.yieldRepo.find({
             where: { farmHealth: { farm: { id: farmId } } },
             order: { createdAt: 'DESC' },
@@ -107,13 +110,7 @@ export class FarmDataConsumer extends WorkerHost {
           }),
         ]);
 
-      const context = this.buildContext(
-        farm,
-        health,
-        iotDevices,
-        recentSensors,
-        yieldComparisons,
-      );
+      const context = this.buildContext(farm, health, iotDevices, telemetry, yieldComparisons);
 
       const message = await this.anthropic.messages.create({
         model: 'claude-sonnet-4-6',
@@ -155,11 +152,31 @@ export class FarmDataConsumer extends WorkerHost {
     }
   }
 
+  private async queryTelemetry(
+    farmId: string,
+    lookbackHours: number,
+  ): Promise<TelemetryItem[]> {
+    const since = new Date(
+      Date.now() - lookbackHours * 3_600_000,
+    ).toISOString();
+    const result = await this.dynamodb.send(
+      new QueryCommand({
+        TableName: 'farm_telemetry',
+        KeyConditionExpression: 'farm_id = :fid AND #ts >= :since',
+        ExpressionAttributeNames: { '#ts': 'timestamp' },
+        ExpressionAttributeValues: { ':fid': farmId, ':since': since },
+        ScanIndexForward: false,
+        Limit: 100,
+      }),
+    );
+    return (result.Items ?? []) as TelemetryItem[];
+  }
+
   private buildContext(
     farm: Farm | null,
     health: FarmHealth | null,
     iotDevices: IotDevice[],
-    recentSensors: SensorHistoryPoint[],
+    telemetry: TelemetryItem[],
     yieldComparisons: YieldComparison[],
   ): string {
     const parts: string[] = [];
@@ -188,16 +205,16 @@ export class FarmDataConsumer extends WorkerHost {
       }
     }
 
-    if (recentSensors.length) {
-      const rows = recentSensors
+    if (telemetry.length) {
+      const rows = telemetry
         .map(
-          (s) =>
-            `moisture=${s.moisture}% temp=${s.temperature}°C N=${s.nitrogen} P=${s.phosphorus} K=${s.potassium} at=${s.createdAt.toISOString()}`,
+          (t) =>
+            `soil_moisture=${t.soil_moisture ?? 'n/a'}% humidity=${t.humidity ?? 'n/a'}% temp=${t.temperature ?? 'n/a'}°C ph=${t.ph ?? 'n/a'} device=${t.device_id ?? 'n/a'} at=${t.timestamp}`,
         )
         .join('\n  ');
-      parts.push(`SENSOR READINGS (last 1hr, ${recentSensors.length} points):\n  ${rows}`);
+      parts.push(`SENSOR READINGS (${telemetry.length} points):\n  ${rows}`);
     } else {
-      parts.push('SENSOR READINGS: none in last 1 hour');
+      parts.push('SENSOR READINGS: none available');
     }
 
     if (iotDevices.length) {

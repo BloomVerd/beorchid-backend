@@ -6,7 +6,6 @@ import { FarmerModule } from '../farmer/farmer.module';
 import { Farm } from '../farm/entities/farm.entity';
 import { FarmHealth } from '../health/entities/farm-health.entity';
 import { IotDevice } from '../farm/entities/iot-device.entity';
-import { SensorHistoryPoint } from '../health/entities/sensor-history-point.entity';
 import { YieldComparison } from '../health/entities/yield-comparison.entity';
 import { FarmDataResolver } from './farm-data.resolver';
 import { FarmDataService } from './farm-data.service';
@@ -18,13 +17,7 @@ import { FarmDataConsumer } from './farm-data.consumer';
     ConfigModule,
     FarmerModule,
     BullModule.registerQueue({ name: 'farm-data-queue' }),
-    TypeOrmModule.forFeature([
-      Farm,
-      FarmHealth,
-      IotDevice,
-      SensorHistoryPoint,
-      YieldComparison,
-    ]),
+    TypeOrmModule.forFeature([Farm, FarmHealth, IotDevice, YieldComparison]),
   ],
   providers: [
     FarmDataResolver,
