@@ -6,7 +6,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import { Farm } from '../farm/entities/farm.entity';
 import { FarmHealth } from '../health/entities/farm-health.entity';
 import { IotDevice } from '../farm/entities/iot-device.entity';
+import { IotCommandType } from '../farm/entities/iot-tool-call.entity';
 import { Prediction } from '../predictions/entities/prediction.entity';
+import { FarmService } from '../farm/farm.service';
 import { ChatPubSubService } from './chat-pubsub.service';
 import { CLAUDE_TOOLS } from './claude.tools';
 
@@ -18,6 +20,7 @@ export class ClaudeService {
   constructor(
     private readonly configService: ConfigService,
     private readonly pubSub: ChatPubSubService,
+    private readonly farmService: FarmService,
     @InjectRepository(Farm)
     private readonly farmRepo: Repository<Farm>,
     @InjectRepository(FarmHealth)
@@ -119,6 +122,17 @@ export class ClaudeService {
         return this.toolGetIotDevices(farmId);
       case 'get_farm_details':
         return this.toolGetFarmDetails(farmId);
+      case 'trigger_iot_device': {
+        const input = toolUse.input as {
+          device_id: string;
+          command_type: string;
+          parameters?: Record<string, unknown>;
+        };
+        return this.farmService.triggerIotDevice(null, farmId, input.device_id, {
+          command_type: input.command_type as IotCommandType,
+          parameters: input.parameters,
+        });
+      }
       default:
         return { error: `Unknown tool: ${toolUse.name}` };
     }

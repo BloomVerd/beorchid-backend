@@ -6,9 +6,13 @@ import { Farm } from './entities/farm.entity';
 import { Coordinate } from './entities/coordinate.entity';
 import { ImageData } from './entities/image-data.entity';
 import { IotDevice } from './entities/iot-device.entity';
+import { IotToolCall } from './entities/iot-tool-call.entity';
 import { PredictionRange } from '../predictions/entities/prediction-range.entity';
 import { FarmService } from './farm.service';
 import { FarmResolver } from './farm.resolver';
+import { IotController } from './iot.controller';
+import { IotPubSubService } from './iot-pubsub.service';
+import { JsonScalar } from './scalars/json.scalar';
 import { FarmerModule } from '../farmer/farmer.module';
 import { JwtStrategy } from 'src/common/strategies';
 
@@ -21,6 +25,7 @@ import { JwtStrategy } from 'src/common/strategies';
       Coordinate,
       ImageData,
       IotDevice,
+      IotToolCall,
       PredictionRange,
     ]),
     JwtModule.registerAsync({
@@ -32,7 +37,8 @@ import { JwtStrategy } from 'src/common/strategies';
       }),
     }),
   ],
-  providers: [FarmService, FarmResolver, JwtStrategy],
-  exports: [TypeOrmModule],
+  controllers: [IotController],
+  providers: [FarmService, FarmResolver, IotPubSubService, JsonScalar, JwtStrategy],
+  exports: [TypeOrmModule, FarmService],
 })
 export class FarmModule {}

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as AWS from 'aws-sdk';
@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Between, FindOptionsWhere, Repository } from 'typeorm';
 import { Farm, SetupStatus } from './entities/farm.entity';
 import { IotDevice } from './entities/iot-device.entity';
+import { IotToolCall, IotCommandType, IotToolCallStatus } from './entities/iot-tool-call.entity';
 import { Farmer } from '../farmer/entities/farmer.entity';
 import { Coordinate } from './entities/coordinate.entity';
 import { ImageData } from './entities/image-data.entity';
@@ -16,7 +17,9 @@ import { UpdateFarmPhotoInput } from './inputs/update-farm-photo.input';
 import { UpdateFarmSoilDataInput } from './inputs/update-farm-soil-data.input';
 import { UploadFarmImagesInput } from './inputs/upload-farm-images.input';
 import { RegisterIotDeviceInput } from './inputs/register-iot-device.input';
+import { TriggerIotDeviceInput } from './inputs/trigger-iot-device.input';
 import { PaginatedFarms, PaginatedImages } from './types/farm.types';
+import { PaginatedIotToolCalls } from './types/iot-tool-call.types';
 
 @Injectable()
 export class FarmService {
@@ -25,6 +28,8 @@ export class FarmService {
     private farmRepository: Repository<Farm>,
     @InjectRepository(ImageData)
     private imageRepository: Repository<ImageData>,
+    @InjectRepository(IotToolCall)
+    private iotToolCallRepository: Repository<IotToolCall>,
     private configService: ConfigService,
   ) {}
 
@@ -34,6 +39,15 @@ export class FarmService {
     const secretAccessKey = this.configService.get<string>('IOT_SECRET_ACCESS_KEY');
     if (!region || !accessKeyId || !secretAccessKey) return null;
     return new AWS.Iot({ region, accessKeyId, secretAccessKey });
+  }
+
+  private buildIotDataClient(): AWS.IotData | null {
+    const endpoint = this.configService.get<string>('IOT_DATA_ENDPOINT');
+    const region = this.configService.get<string>('IOT_REGION');
+    const accessKeyId = this.configService.get<string>('IOT_ACCESS_KEY_ID');
+    const secretAccessKey = this.configService.get<string>('IOT_SECRET_ACCESS_KEY');
+    if (!endpoint || !region || !accessKeyId || !secretAccessKey) return null;
+    return new AWS.IotData({ endpoint, region, accessKeyId, secretAccessKey });
   }
 
   async addFarm(farmerId: string, input: CreateFarmInput): Promise<Farm> {
@@ -304,6 +318,13 @@ export class FarmService {
         await iotClient
           .attachThingPrincipal({ thingName, principal: certificateArn! })
           .promise();
+
+        const policyName = this.configService.get<string>('IOT_DEVICE_POLICY_NAME');
+        if (policyName) {
+          await iotClient
+            .attachPolicy({ policyName, target: certificateArn! })
+            .promise();
+        }
       }
 
       const device = em.create(IotDevice, {
@@ -404,6 +425,93 @@ export class FarmService {
       await em.save(device);
       return true;
     });
+  }
+
+  async triggerIotDevice(
+    farmerId: string | null,
+    farmId: string,
+    deviceId: string,
+    input: TriggerIotDeviceInput,
+  ): Promise<IotToolCall> {
+    const whereClause: Record<string, unknown> = { id: deviceId, farm: { id: farmId } };
+    if (farmerId) {
+      (whereClause['farm'] as Record<string, unknown>)['farmer'] = { id: farmerId };
+    }
+
+    const device = await this.farmRepository.manager.findOne(IotDevice, {
+      where: whereClause as any,
+      relations: ['farm'],
+    });
+    if (!device) throw new BadRequestException('IoT device not found');
+    if (!device.is_active) throw new BadRequestException('IoT device is not active');
+
+    const toolCall = this.iotToolCallRepository.create({
+      command_type: input.command_type as IotCommandType,
+      parameters: input.parameters,
+      status: IotToolCallStatus.PENDING,
+      requested_by: farmerId ? 'user' : 'ai',
+      iot_device: device,
+    });
+    const saved = await this.iotToolCallRepository.save(toolCall);
+
+    const iotData = this.buildIotDataClient();
+    if (iotData && device.thing_name) {
+      const topic = `farm/${farmId}/devices/${device.thing_name}/commands`;
+      const payload = JSON.stringify({
+        tool_call_id: saved.id,
+        command_type: input.command_type,
+        parameters: input.parameters ?? {},
+      });
+      await iotData.publish({ topic, payload }).promise();
+    }
+
+    return saved;
+  }
+
+  async listIotToolCalls(
+    farmerId: string,
+    farmId: string,
+    page: number,
+    limit: number,
+  ): Promise<PaginatedIotToolCalls> {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const [data, total] = await this.iotToolCallRepository
+      .createQueryBuilder('tc')
+      .leftJoinAndSelect('tc.iot_device', 'device')
+      .leftJoin('device.farm', 'farm')
+      .leftJoin('farm.farmer', 'farmer')
+      .where('farm.id = :farmId', { farmId })
+      .andWhere('farmer.id = :farmerId', { farmerId })
+      .andWhere('tc.createdAt >= :since', { since })
+      .orderBy('tc.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    return { data, total, page, lastPage: Math.ceil(total / limit) };
+  }
+
+  async handleIotWebhook(
+    body: { tool_call_id: string; status: 'COMPLETED' | 'FAILED'; response?: Record<string, unknown> },
+    secret: string,
+  ): Promise<IotToolCall & { farmId: string }> {
+    const expectedSecret = this.configService.get<string>('IOT_WEBHOOK_SECRET');
+    if (expectedSecret && secret !== expectedSecret) {
+      throw new UnauthorizedException('Invalid webhook secret');
+    }
+
+    const toolCall = await this.iotToolCallRepository.findOne({
+      where: { id: body.tool_call_id },
+      relations: ['iot_device', 'iot_device.farm'],
+    });
+    if (!toolCall) throw new BadRequestException('IoT tool call not found');
+
+    toolCall.status = body.status === 'COMPLETED' ? IotToolCallStatus.COMPLETED : IotToolCallStatus.FAILED;
+    if (body.response) toolCall.response = body.response;
+    await this.iotToolCallRepository.save(toolCall);
+
+    return Object.assign(toolCall, { farmId: toolCall.iot_device.farm.id });
   }
 
   async listFarmImages(

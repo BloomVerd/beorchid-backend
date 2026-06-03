@@ -9,6 +9,7 @@ import { Farm } from '../farm/entities/farm.entity';
 import { FarmHealth } from '../health/entities/farm-health.entity';
 import { IotDevice } from '../farm/entities/iot-device.entity';
 import { Prediction } from '../predictions/entities/prediction.entity';
+import { FarmModule } from '../farm/farm.module';
 import { ChatController } from './chat.controller';
 import { ChatResolver } from './chat.resolver';
 import { ChatService } from './chat.service';
@@ -21,6 +22,7 @@ import { JwtStrategy } from 'src/common/strategies';
 @Module({
   imports: [
     ConfigModule,
+    FarmModule,
     BullModule.registerQueue({ name: 'chat-queue' }),
     TypeOrmModule.forFeature([
       Chat,

@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, FindOptionsWhere, Repository } from 'typeorm';
 import { Prediction } from './entities/prediction.entity';
+import { PredictionRange } from './entities/prediction-range.entity';
 import { Farm } from '../farm/entities/farm.entity';
 import { ImageData } from '../farm/entities/image-data.entity';
 import { Farmer } from '../farmer/entities/farmer.entity';
@@ -38,6 +39,39 @@ export class PredictionService {
       if (!farm.farm_images?.length) {
         throw new BadRequestException(
           'Farm must have at least 1 image to generate predictions',
+        );
+      }
+
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() + diffToMonday);
+      weekStart.setHours(0, 0, 0, 0);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      weekEnd.setHours(23, 59, 59, 999);
+
+      const range = await em.findOne(PredictionRange, {
+        where: { farm: { id: farmId }, inserted_at: Between(weekStart, weekEnd) },
+      });
+
+      if (range) {
+        if (range.regeneration_count >= 3) {
+          throw new BadRequestException(
+            'You have exhausted your 3 predictions for this week',
+          );
+        }
+        range.regeneration_count += 1;
+        await em.save(range);
+      } else {
+        await em.save(
+          em.create(PredictionRange, {
+            week_start: weekStart,
+            week_end: weekEnd,
+            farm,
+            regeneration_count: 1,
+          }),
         );
       }
 
@@ -91,6 +125,21 @@ export class PredictionService {
     });
 
     if (!farm) throw new NotFoundException('Farm not found');
+
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const week = Math.ceil(now.getDate() / 7);
+    const dayStart = (week - 1) * 7 + 1;
+    const weekStart = new Date(year, month - 1, dayStart, 0, 0, 0, 0);
+    const lastDayOfMonth = new Date(year, month, 0).getDate();
+    const dayEnd = week >= 4 ? lastDayOfMonth : week * 7;
+    const weekEnd = new Date(year, month - 1, dayEnd, 23, 59, 59, 999);
+
+    await this.predictionRepository.delete({
+      farm: { id: farmId },
+      createdAt: Between(weekStart, weekEnd) as any,
+    });
 
     const records: Prediction[] = [];
     for (const image of farm.farm_images) {

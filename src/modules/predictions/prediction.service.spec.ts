@@ -29,11 +29,21 @@ const makeImage = (predictionTypes: PredictionType[] = [PredictionType.DISEASE_P
   prediction_types: predictionTypes,
 });
 
+const makePredictionRange = (overrides: any = {}) => ({
+  id: 'range-id-1',
+  week_start: new Date(),
+  week_end: new Date(),
+  inserted_at: new Date(),
+  regeneration_count: 1,
+  ...overrides,
+});
+
 describe('PredictionService', () => {
   let service: PredictionService;
   let predictionRepo: {
     create: jest.Mock;
     save: jest.Mock;
+    delete: jest.Mock;
     findAndCount: jest.Mock;
     manager: {
       transaction: jest.Mock;
@@ -41,14 +51,19 @@ describe('PredictionService', () => {
     };
   };
   let predictionProducer: { createPrediction: jest.Mock };
-  let mockEm: { findOne: jest.Mock };
+  let mockEm: { findOne: jest.Mock; save: jest.Mock; create: jest.Mock };
 
   beforeEach(async () => {
-    mockEm = { findOne: jest.fn() };
+    mockEm = {
+      findOne: jest.fn(),
+      save: jest.fn().mockResolvedValue({}),
+      create: jest.fn().mockImplementation((_entity: any, data: any) => data),
+    };
 
     predictionRepo = {
       create: jest.fn(),
       save: jest.fn(),
+      delete: jest.fn().mockResolvedValue({}),
       findAndCount: jest.fn(),
       manager: {
         transaction: jest.fn().mockImplementation(async (cb: any) => cb(mockEm)),
@@ -74,17 +89,82 @@ describe('PredictionService', () => {
   afterEach(() => jest.clearAllMocks());
 
   describe('generateFarmPredictions', () => {
-    it('queues prediction job and returns success message', async () => {
+    it('queues prediction job and returns success message on first generation', async () => {
       const farmer = makeFarmer();
       const farm = makeFarm({ farm_images: [makeImage()] });
       mockEm.findOne
-        .mockResolvedValueOnce(farmer)
-        .mockResolvedValueOnce(farm);
+        .mockResolvedValueOnce(farmer)   // Farmer
+        .mockResolvedValueOnce(farm)     // Farm
+        .mockResolvedValueOnce(null);    // PredictionRange — no existing range this week
 
       const result = await service.generateFarmPredictions('farmer@example.com', 'farm-id-1');
 
       expect(predictionProducer.createPrediction).toHaveBeenCalledWith({ farmId: 'farm-id-1' });
       expect(result.message).toContain('Prediction initiated');
+    });
+
+    it('creates a new PredictionRange with count 1 on first generation', async () => {
+      const farmer = makeFarmer();
+      const farm = makeFarm({ farm_images: [makeImage()] });
+      mockEm.findOne
+        .mockResolvedValueOnce(farmer)
+        .mockResolvedValueOnce(farm)
+        .mockResolvedValueOnce(null);
+
+      await service.generateFarmPredictions('farmer@example.com', 'farm-id-1');
+
+      expect(mockEm.create).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ regeneration_count: 1 }),
+      );
+      expect(mockEm.save).toHaveBeenCalled();
+    });
+
+    it('increments regeneration_count when range exists and count is below limit', async () => {
+      const farmer = makeFarmer();
+      const farm = makeFarm({ farm_images: [makeImage()] });
+      const range = makePredictionRange({ regeneration_count: 1 });
+      mockEm.findOne
+        .mockResolvedValueOnce(farmer)
+        .mockResolvedValueOnce(farm)
+        .mockResolvedValueOnce(range);
+
+      await service.generateFarmPredictions('farmer@example.com', 'farm-id-1');
+
+      expect(range.regeneration_count).toBe(2);
+      expect(mockEm.save).toHaveBeenCalledWith(range);
+      expect(predictionProducer.createPrediction).toHaveBeenCalled();
+    });
+
+    it('allows generation when regeneration_count is exactly 2 (third total run)', async () => {
+      const farmer = makeFarmer();
+      const farm = makeFarm({ farm_images: [makeImage()] });
+      const range = makePredictionRange({ regeneration_count: 2 });
+      mockEm.findOne
+        .mockResolvedValueOnce(farmer)
+        .mockResolvedValueOnce(farm)
+        .mockResolvedValueOnce(range);
+
+      await service.generateFarmPredictions('farmer@example.com', 'farm-id-1');
+
+      expect(range.regeneration_count).toBe(3);
+      expect(predictionProducer.createPrediction).toHaveBeenCalled();
+    });
+
+    it('throws BadRequestException when regeneration_count has reached 3', async () => {
+      const farmer = makeFarmer();
+      const farm = makeFarm({ farm_images: [makeImage()] });
+      const range = makePredictionRange({ regeneration_count: 3 });
+      mockEm.findOne
+        .mockResolvedValueOnce(farmer)
+        .mockResolvedValueOnce(farm)
+        .mockResolvedValueOnce(range);
+
+      await expect(
+        service.generateFarmPredictions('farmer@example.com', 'farm-id-1'),
+      ).rejects.toThrow(new BadRequestException('You have exhausted your 3 predictions for this week'));
+
+      expect(predictionProducer.createPrediction).not.toHaveBeenCalled();
     });
 
     it('throws BadRequestException when farmer is not found', async () => {
@@ -163,6 +243,34 @@ describe('PredictionService', () => {
       predictionRepo.manager.findOne.mockResolvedValue(null);
 
       await expect(service.createPredictions('missing-farm')).rejects.toThrow(NotFoundException);
+    });
+
+    it('deletes existing predictions for the current week before creating new ones', async () => {
+      const images = [makeImage([PredictionType.DISEASE_PREDICTION])];
+      const farm = makeFarm({ farm_images: images });
+      predictionRepo.manager.findOne.mockResolvedValue(farm);
+      predictionRepo.create.mockImplementation((pred: any) => pred);
+      predictionRepo.save.mockResolvedValue([]);
+
+      await service.createPredictions('farm-id-1');
+
+      expect(predictionRepo.delete).toHaveBeenCalledWith(
+        expect.objectContaining({ farm: { id: 'farm-id-1' } }),
+      );
+    });
+
+    it('deletes before saving so new predictions replace old ones', async () => {
+      const images = [makeImage([PredictionType.DISEASE_PREDICTION])];
+      const farm = makeFarm({ farm_images: images });
+      predictionRepo.manager.findOne.mockResolvedValue(farm);
+      predictionRepo.create.mockImplementation((pred: any) => pred);
+      predictionRepo.save.mockResolvedValue([]);
+
+      await service.createPredictions('farm-id-1');
+
+      const deleteOrder = predictionRepo.delete.mock.invocationCallOrder[0];
+      const saveOrder = predictionRepo.save.mock.invocationCallOrder[0];
+      expect(deleteOrder).toBeLessThan(saveOrder);
     });
 
     it('creates one prediction per image per prediction type and saves in bulk', async () => {

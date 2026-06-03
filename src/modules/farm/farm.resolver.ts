@@ -10,7 +10,10 @@ import { UpdateFarmPhotoInput } from './inputs/update-farm-photo.input';
 import { UpdateFarmSoilDataInput } from './inputs/update-farm-soil-data.input';
 import { UploadFarmImagesInput } from './inputs/upload-farm-images.input';
 import { RegisterIotDeviceInput } from './inputs/register-iot-device.input';
+import { TriggerIotDeviceInput } from './inputs/trigger-iot-device.input';
 import { PaginatedFarms, PaginatedImages } from './types/farm.types';
+import { PaginatedIotToolCalls } from './types/iot-tool-call.types';
+import { IotToolCall } from './entities/iot-tool-call.entity';
 import { GqlJwtAuthGuard } from 'src/common/guards';
 import { CurrentFarmer } from 'src/common/decorators';
 import { Farmer } from '../farmer/entities/farmer.entity';
@@ -126,6 +129,17 @@ export class FarmResolver {
     return this.farmService.clearIotDeviceCert(farmer.id, farmId, deviceId);
   }
 
+  @Mutation(() => IotToolCall)
+  @UseGuards(GqlJwtAuthGuard)
+  triggerIotDevice(
+    @Args('farmId') farmId: string,
+    @Args('deviceId') deviceId: string,
+    @Args('input') input: TriggerIotDeviceInput,
+    @CurrentFarmer() farmer: Farmer,
+  ) {
+    return this.farmService.triggerIotDevice(farmer.id, farmId, deviceId, input);
+  }
+
   // ─── Queries ─────────────────────────────────────────────────────────────────
 
   @Query(() => PaginatedFarms)
@@ -142,6 +156,17 @@ export class FarmResolver {
   @UseGuards(GqlJwtAuthGuard)
   getFarm(@Args('farmId') farmId: string, @CurrentFarmer() farmer: Farmer) {
     return this.farmService.getFarm(farmer.id, farmId);
+  }
+
+  @Query(() => PaginatedIotToolCalls)
+  @UseGuards(GqlJwtAuthGuard)
+  listIotToolCalls(
+    @Args('farmId') farmId: string,
+    @Args('page', { type: () => Int, defaultValue: 1 }) page: number,
+    @Args('limit', { type: () => Int, defaultValue: 20 }) limit: number,
+    @CurrentFarmer() farmer: Farmer,
+  ) {
+    return this.farmService.listIotToolCalls(farmer.id, farmId, page, limit);
   }
 
   @Query(() => PaginatedImages)

@@ -45,6 +45,37 @@ export const CLAUDE_TOOLS: Anthropic.Tool[] = [
       required: [],
     },
   },
+  {
+    name: 'trigger_iot_device',
+    description:
+      'Send a command to an IoT device on the farm (e.g., start irrigation, capture an image). Returns the tool call record including its ID for tracking.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        device_id: {
+          type: 'string',
+          description: 'The UUID of the IotDevice to command',
+        },
+        command_type: {
+          type: 'string',
+          enum: [
+            'IRRIGATE',
+            'STOP_IRRIGATION',
+            'CAPTURE_IMAGE',
+            'ACTIVATE_SENSOR',
+            'DEACTIVATE_SENSOR',
+          ],
+          description: 'The command to send to the device',
+        },
+        parameters: {
+          type: 'object',
+          description:
+            'Optional command parameters, e.g. { "duration_minutes": 30 }',
+        },
+      },
+      required: ['device_id', 'command_type'],
+    },
+  },
 ];
 
 export interface ChatSseEvent {

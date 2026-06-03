@@ -25,6 +25,10 @@ export class PredictionRange {
   week_end: Date;
 
   @Field()
+  @Column({ default: 0 })
+  regeneration_count: number;
+
+  @Field()
   @CreateDateColumn()
   inserted_at: Date;
 

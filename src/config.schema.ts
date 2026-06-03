@@ -31,6 +31,14 @@ export const configValidationSchema = Joi.object({
   IOT_REGION: Joi.string().optional(),
   IOT_ACCESS_KEY_ID: Joi.string().optional(),
   IOT_SECRET_ACCESS_KEY: Joi.string().optional(),
+  IOT_DATA_ENDPOINT: Joi.string().optional(),
+  IOT_WEBHOOK_SECRET: Joi.string().optional(),
+  IOT_DEVICE_POLICY_NAME: Joi.string().optional(),
+
+  // AWS DynamoDB
+  DYNAMODB_REGION: Joi.string().optional(),
+  DYNAMODB_ACCESS_KEY_ID: Joi.string().optional(),
+  DYNAMODB_SECRET_ACCESS_KEY: Joi.string().optional(),
 
   // Cloudflare R2 (S3-compatible)
   S3_REGION: Joi.string().optional(),
