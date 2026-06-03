@@ -155,11 +155,11 @@ export class HealthConsumer extends WorkerHost {
 
     const health = this.farmHealthRepo.create({
       farm: { id: farmId } as Farm,
-      overall_score: parsed.overall_score,
-      soil_health: parsed.soil_health,
-      crop_health: parsed.crop_health,
-      weather_stress: parsed.weather_stress,
-      disease_risk: parsed.disease_risk,
+      overall_score: parsed.overall_score ?? 0,
+      soil_health: parsed.soil_health ?? 0,
+      crop_health: parsed.crop_health ?? 0,
+      weather_stress: parsed.weather_stress ?? 0,
+      disease_risk: parsed.disease_risk ?? 0,
       computed_at: new Date(),
     });
     const saved = await this.farmHealthRepo.save(health);
@@ -169,15 +169,15 @@ export class HealthConsumer extends WorkerHost {
         ? this.cropFieldHealthRepo.save(
             parsed.crop_field_health.map((cfh) =>
               this.cropFieldHealthRepo.create({
-                field_name: cfh.field_name,
+                field_name: cfh.field_name ?? '',
                 crop_type: (cfh.crop_type as CropType) ?? CropType.MAIZE,
-                health_percent: cfh.health_percent,
-                ndvi: cfh.ndvi,
-                disease_probability: cfh.disease_probability,
+                health_percent: cfh.health_percent ?? 0,
+                ndvi: cfh.ndvi ?? 0,
+                disease_probability: cfh.disease_probability ?? 0,
                 disease_type: cfh.disease_type ?? undefined,
                 growth_stage:
                   (cfh.growth_stage as GrowthStage) ?? GrowthStage.VEGETATIVE,
-                expected_harvest: cfh.expected_harvest,
+                expected_harvest: cfh.expected_harvest ?? '',
                 farmHealth: saved,
               }),
             ),
@@ -188,11 +188,11 @@ export class HealthConsumer extends WorkerHost {
         ? this.diseaseAlertRepo.save(
             parsed.disease_alerts.map((da) =>
               this.diseaseAlertRepo.create({
-                disease_name: da.disease_name,
-                probability: da.probability,
-                first_detected: new Date(da.first_detected),
+                disease_name: da.disease_name ?? '',
+                probability: da.probability ?? 0,
+                first_detected: new Date(da.first_detected ?? Date.now()),
                 spread: (da.spread as DiseaseSpread) ?? DiseaseSpread.STABLE,
-                treatment: da.treatment,
+                treatment: da.treatment ?? '',
                 infected_leaves: da.infected_leaves ?? undefined,
                 farmHealth: saved,
               }),
@@ -205,10 +205,10 @@ export class HealthConsumer extends WorkerHost {
             parsed.health_alerts.map((ha) =>
               this.healthAlertRepo.create({
                 severity: (ha.severity as AlertSeverity) ?? AlertSeverity.INFO,
-                title: ha.title,
-                description: ha.description,
-                action: ha.action,
-                estimated_impact: ha.estimated_impact,
+                title: ha.title ?? '',
+                description: ha.description ?? '',
+                action: ha.action ?? '',
+                estimated_impact: ha.estimated_impact ?? '',
                 farmHealth: saved,
               }),
             ),
@@ -219,12 +219,12 @@ export class HealthConsumer extends WorkerHost {
         ? this.sensorRepo.save(
             parsed.sensor_history.map((sp) =>
               this.sensorRepo.create({
-                date: sp.date,
-                moisture: sp.moisture,
-                temperature: sp.temperature,
-                nitrogen: sp.nitrogen,
-                phosphorus: sp.phosphorus,
-                potassium: sp.potassium,
+                date: sp.date ?? new Date().toISOString().split('T')[0],
+                moisture: sp.moisture ?? 0,
+                temperature: sp.temperature ?? 0,
+                nitrogen: sp.nitrogen ?? 0,
+                phosphorus: sp.phosphorus ?? 0,
+                potassium: sp.potassium ?? 0,
                 farmHealth: saved,
               }),
             ),
@@ -235,12 +235,12 @@ export class HealthConsumer extends WorkerHost {
         ? this.yieldRepo.save(
             parsed.yield_comparisons.map((yc) =>
               this.yieldRepo.create({
-                field_name: yc.field_name,
-                current_yield: yc.current_yield,
-                last_season_yield: yc.last_season_yield,
-                confidence_min: yc.confidence_min,
-                confidence_max: yc.confidence_max,
-                revenue: yc.revenue,
+                field_name: yc.field_name ?? '',
+                current_yield: yc.current_yield ?? 0,
+                last_season_yield: yc.last_season_yield ?? 0,
+                confidence_min: yc.confidence_min ?? 0,
+                confidence_max: yc.confidence_max ?? 0,
+                revenue: yc.revenue ?? 0,
                 farmHealth: saved,
               }),
             ),
