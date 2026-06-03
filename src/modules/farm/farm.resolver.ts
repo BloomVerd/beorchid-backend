@@ -140,6 +140,16 @@ export class FarmResolver {
     return this.farmService.triggerIotDevice(farmer.id, farmId, deviceId, input);
   }
 
+  @Mutation(() => Boolean)
+  @UseGuards(GqlJwtAuthGuard)
+  deleteFarmImage(
+    @Args('farmId') farmId: string,
+    @Args('imageId') imageId: string,
+    @CurrentFarmer() farmer: Farmer,
+  ) {
+    return this.farmService.deleteFarmImage(farmer.id, farmId, imageId);
+  }
+
   // ─── Queries ─────────────────────────────────────────────────────────────────
 
   @Query(() => PaginatedFarms)

@@ -514,6 +514,25 @@ export class FarmService {
     return Object.assign(toolCall, { farmId: toolCall.iot_device.farm.id });
   }
 
+  async deleteFarmImage(
+    farmerId: string,
+    farmId: string,
+    imageId: string,
+  ): Promise<boolean> {
+    const farm = await this.farmRepository.findOne({
+      where: { id: farmId, farmer: { id: farmerId } },
+    });
+    if (!farm) throw new BadRequestException('Farm not found');
+
+    const image = await this.imageRepository.findOne({
+      where: { id: imageId, farm: { id: farmId } },
+    });
+    if (!image) throw new BadRequestException('Image not found');
+
+    await this.imageRepository.remove(image);
+    return true;
+  }
+
   async listFarmImages(
     farmerId: string,
     farmId: string,
