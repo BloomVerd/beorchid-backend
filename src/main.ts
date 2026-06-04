@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { createDatabase } from 'src/common/lib/create-db';
 import { graphqlUploadExpress } from 'graphql-upload';
 import { ValidationPipe } from '@nestjs/common';
+import { FarmService } from './modules/farm/farm.service';
 
 async function bootstrap() {
   // Create main database
@@ -33,5 +34,8 @@ async function bootstrap() {
 
   await app.listen(port);
   console.log(`Application is running on: ${await app.getUrl()}`);
+
+  const farmService = app.get(FarmService);
+  await farmService.setupIotRule();
 }
 void bootstrap();

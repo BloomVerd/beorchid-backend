@@ -53,6 +53,9 @@ export class IotDevice {
   thing_name?: string;
 
   @Column({ nullable: true })
+  thing_arn?: string;
+
+  @Column({ nullable: true })
   certificate_id?: string;
 
   @Column({ nullable: true })

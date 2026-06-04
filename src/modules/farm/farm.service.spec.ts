@@ -15,6 +15,11 @@ const mockIotInstance = {
   updateCertificate: jest.fn().mockReturnValue(makeIotPromise({})),
   deleteCertificate: jest.fn().mockReturnValue(makeIotPromise({})),
   deleteThing: jest.fn().mockReturnValue(makeIotPromise({})),
+  createPolicy: jest.fn().mockReturnValue(makeIotPromise({})),
+  attachPolicy: jest.fn().mockReturnValue(makeIotPromise({})),
+  createJob: jest.fn().mockReturnValue(makeIotPromise({})),
+  createTopicRule: jest.fn().mockReturnValue(makeIotPromise({})),
+  confirmTopicRuleDestination: jest.fn().mockReturnValue(makeIotPromise({})),
 };
 
 const mockIotDataInstance = {
@@ -26,10 +31,29 @@ jest.mock('aws-sdk', () => ({
   IotData: jest.fn().mockImplementation(() => mockIotDataInstance),
 }));
 
+let pipedStream: any = null;
+const mockArchiveInstance = {
+  on: jest.fn(),
+  pipe: jest.fn().mockImplementation((stream: any) => {
+    pipedStream = stream;
+  }),
+  append: jest.fn(),
+  finalize: jest.fn().mockImplementation(() => {
+    setImmediate(() => {
+      if (pipedStream) {
+        pipedStream.write(Buffer.from('PK'));
+        pipedStream.end();
+      }
+    });
+  }),
+};
+jest.mock('archiver', () => jest.fn().mockImplementation(() => mockArchiveInstance));
+
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { BadRequestException } from '@nestjs/common';
+import * as AWS from 'aws-sdk';
 import { FarmService } from './farm.service';
 import { Farm, SetupStatus, CropType, FarmType } from './entities/farm.entity';
 import { ImageData, PredictionType } from './entities/image-data.entity';
@@ -66,6 +90,7 @@ const makeDevice = (overrides: Partial<IotDevice> = {}): IotDevice =>
     device_type: DeviceType.SOIL_MOISTURE_SENSOR,
     is_active: false,
     thing_name: 'farm_farm-id-1_device-uuid-1',
+    thing_arn: 'arn:aws:iot:us-east-1:784608886729:thing/farm_farm-id-1_device-uuid-1',
     certificate_id: 'cert-id',
     certificate_arn: 'cert-arn',
     certificate_pem: 'cert-pem',
@@ -187,9 +212,49 @@ describe('FarmService', () => {
 
     service = module.get<FarmService>(FarmService);
 
-    // Reset IoT mock call counts between tests
+    // Re-initialize AWS constructors (Jest 30 clearAllMocks resets mockImplementation)
+    (AWS.Iot as jest.Mock).mockImplementation(() => mockIotInstance);
+    (AWS.IotData as jest.Mock).mockImplementation(() => mockIotDataInstance);
+
+    // Reset IoT mocks and re-initialize return values (Jest 30 clearAllMocks resets them)
     Object.values(mockIotInstance).forEach((fn) => (fn as jest.Mock).mockClear());
+    mockIotInstance.createThing.mockReturnValue(makeIotPromise({}));
+    mockIotInstance.createKeysAndCertificate.mockReturnValue(
+      makeIotPromise({
+        certificateId: 'cert-id',
+        certificateArn: 'cert-arn',
+        certificatePem: 'cert-pem',
+        keyPair: { PrivateKey: 'private-key', PublicKey: 'public-key' },
+      }),
+    );
+    mockIotInstance.attachThingPrincipal.mockReturnValue(makeIotPromise({}));
+    mockIotInstance.detachThingPrincipal.mockReturnValue(makeIotPromise({}));
+    mockIotInstance.updateCertificate.mockReturnValue(makeIotPromise({}));
+    mockIotInstance.deleteCertificate.mockReturnValue(makeIotPromise({}));
+    mockIotInstance.deleteThing.mockReturnValue(makeIotPromise({}));
+    mockIotInstance.createPolicy.mockReturnValue(makeIotPromise({}));
+    mockIotInstance.attachPolicy.mockReturnValue(makeIotPromise({}));
+    mockIotInstance.createJob.mockReturnValue(makeIotPromise({}));
+    mockIotInstance.createTopicRule.mockReturnValue(makeIotPromise({}));
+    mockIotInstance.confirmTopicRuleDestination.mockReturnValue(makeIotPromise({}));
+
     Object.values(mockIotDataInstance).forEach((fn) => (fn as jest.Mock).mockClear());
+    mockIotDataInstance.publish.mockReturnValue(makeIotPromise({}));
+
+    // Reset archiver mock between tests
+    pipedStream = null;
+    Object.values(mockArchiveInstance).forEach((fn) => (fn as jest.Mock).mockClear());
+    mockArchiveInstance.pipe.mockImplementation((stream: any) => {
+      pipedStream = stream;
+    });
+    mockArchiveInstance.finalize.mockImplementation(() => {
+      setImmediate(() => {
+        if (pipedStream) {
+          pipedStream.write(Buffer.from('PK'));
+          pipedStream.end();
+        }
+      });
+    });
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -446,12 +511,172 @@ describe('FarmService', () => {
       expect(result.certificate_id).toBeDefined();
     });
 
+    it('captures thing_arn from createThing response and persists it', async () => {
+      const thingArn = 'arn:aws:iot:us-east-1:784608886729:thing/farm_farm-id-1_test-device';
+      mockIotInstance.createThing.mockReturnValue(makeIotPromise({ thingArn, thingName: 'farm_farm-id-1_test-device' }));
+      const farm = makeFarm();
+      const device = makeDevice({ thing_arn: thingArn });
+      mockEm.findOne.mockResolvedValue(farm);
+      mockEm.create.mockReturnValue(device);
+      mockEm.save.mockResolvedValue(device);
+
+      const result = await service.registerIotDevice('farmer-id-1', 'farm-id-1', input as any);
+
+      const createCall = mockEm.create.mock.calls[0][1];
+      expect(createCall.thing_arn).toBe(thingArn);
+      expect(result.thing_arn).toBe(thingArn);
+    });
+
+    it('creates a per-device IoT policy with correct name and scoped ARNs', async () => {
+      const farm = makeFarm();
+      const device = makeDevice();
+      mockEm.findOne.mockResolvedValue(farm);
+      mockEm.create.mockReturnValue(device);
+      mockEm.save.mockResolvedValue(device);
+
+      await service.registerIotDevice('farmer-id-1', 'farm-id-1', input as any);
+
+      const createPolicyCall = mockIotInstance.createPolicy.mock.calls[0][0];
+      expect(createPolicyCall.policyName).toMatch(/^farm_farm-id-1_.+-Policy$/);
+
+      const doc = JSON.parse(createPolicyCall.policyDocument);
+      const publishStatement = doc.Statement.find((s: any) =>
+        s.Action.includes('iot:Publish'),
+      );
+      expect(publishStatement.Resource[0]).toContain('farms/farm-id-1/');
+      expect(publishStatement.Resource[0]).toContain('/telemetry');
+
+      expect(mockIotInstance.attachPolicy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          policyName: createPolicyCall.policyName,
+          target: 'cert-arn',
+        }),
+      );
+    });
+
     it('throws BadRequestException when farm is not found', async () => {
       mockEm.findOne.mockResolvedValue(null);
 
       await expect(
         service.registerIotDevice('farmer-id-1', 'missing-farm', input as any),
       ).rejects.toThrow(new BadRequestException('Farm not found'));
+    });
+  });
+
+  describe('downloadIotDevicePackage', () => {
+    it('returns a zip buffer and correct filename', async () => {
+      const device = makeDevice();
+      farmRepo.manager.findOne.mockResolvedValue(device);
+
+      const result = await service.downloadIotDevicePackage(
+        'farmer-id-1',
+        'farm-id-1',
+        'device-uuid-1',
+      );
+
+      expect(result.filename).toBe('farm_farm-id-1_device-uuid-1.zip');
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.buffer.length).toBeGreaterThan(0);
+    });
+
+    it('appends all 6 required files to the archive', async () => {
+      const device = makeDevice();
+      farmRepo.manager.findOne.mockResolvedValue(device);
+
+      await service.downloadIotDevicePackage('farmer-id-1', 'farm-id-1', 'device-uuid-1');
+
+      const appendedNames = mockArchiveInstance.append.mock.calls.map(
+        (call: any[]) => call[1].name,
+      );
+      expect(appendedNames).toContain('farm_farm-id-1_device-uuid-1-Policy');
+      expect(appendedNames).toContain('farm_farm-id-1_device-uuid-1.cert.pem');
+      expect(appendedNames).toContain('farm_farm-id-1_device-uuid-1.private.key');
+      expect(appendedNames).toContain('farm_farm-id-1_device-uuid-1.public.key');
+      expect(appendedNames).toContain('start.sh');
+      expect(appendedNames).toContain('index.ts');
+    });
+
+    it('embeds correct farmId and deviceId in the policy JSON', async () => {
+      const device = makeDevice();
+      farmRepo.manager.findOne.mockResolvedValue(device);
+
+      await service.downloadIotDevicePackage('farmer-id-1', 'farm-id-1', 'device-uuid-1');
+
+      const policyCall = mockArchiveInstance.append.mock.calls.find(
+        (call: any[]) => call[1].name === 'farm_farm-id-1_device-uuid-1-Policy',
+      );
+      const policyDoc = JSON.parse(policyCall[0]);
+      const publishArn = policyDoc.Statement[0].Resource[0];
+      expect(publishArn).toBe(
+        'arn:aws:iot:us-east-1:784608886729:topic/farms/farm-id-1/device-uuid-1/telemetry',
+      );
+    });
+
+    it('embeds actual cert material from the device into the archive', async () => {
+      const device = makeDevice();
+      farmRepo.manager.findOne.mockResolvedValue(device);
+
+      await service.downloadIotDevicePackage('farmer-id-1', 'farm-id-1', 'device-uuid-1');
+
+      const certCall = mockArchiveInstance.append.mock.calls.find(
+        (call: any[]) => call[1].name === 'farm_farm-id-1_device-uuid-1.cert.pem',
+      );
+      expect(certCall[0]).toBe('cert-pem');
+
+      const keyCall = mockArchiveInstance.append.mock.calls.find(
+        (call: any[]) => call[1].name === 'farm_farm-id-1_device-uuid-1.private.key',
+      );
+      expect(keyCall[0]).toBe('private-key');
+    });
+
+    it('uses empty string when cert fields have been cleared', async () => {
+      const device = makeDevice({
+        certificate_pem: undefined,
+        private_key: undefined,
+        public_key: undefined,
+      });
+      farmRepo.manager.findOne.mockResolvedValue(device);
+
+      await service.downloadIotDevicePackage('farmer-id-1', 'farm-id-1', 'device-uuid-1');
+
+      const certCall = mockArchiveInstance.append.mock.calls.find(
+        (call: any[]) => call[1].name === 'farm_farm-id-1_device-uuid-1.cert.pem',
+      );
+      expect(certCall[0]).toBe('');
+    });
+
+    it('embeds farmId and deviceId in start.sh', async () => {
+      const device = makeDevice();
+      farmRepo.manager.findOne.mockResolvedValue(device);
+
+      await service.downloadIotDevicePackage('farmer-id-1', 'farm-id-1', 'device-uuid-1');
+
+      const shCall = mockArchiveInstance.append.mock.calls.find(
+        (call: any[]) => call[1].name === 'start.sh',
+      );
+      expect(shCall[0]).toContain('farm_farm-id-1_device-uuid-1.private.key');
+      expect(shCall[0]).toContain('farms/farm-id-1/device-uuid-1/telemetry');
+    });
+
+    it('embeds farmId and deviceId as constants in index.ts', async () => {
+      const device = makeDevice();
+      farmRepo.manager.findOne.mockResolvedValue(device);
+
+      await service.downloadIotDevicePackage('farmer-id-1', 'farm-id-1', 'device-uuid-1');
+
+      const tsCall = mockArchiveInstance.append.mock.calls.find(
+        (call: any[]) => call[1].name === 'index.ts',
+      );
+      expect(tsCall[0]).toContain('const FARM_ID = "farm-id-1"');
+      expect(tsCall[0]).toContain('const DEVICE_ID = "device-uuid-1"');
+    });
+
+    it('throws BadRequestException when device is not found', async () => {
+      farmRepo.manager.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.downloadIotDevicePackage('farmer-id-1', 'farm-id-1', 'missing-device'),
+      ).rejects.toThrow(new BadRequestException('IoT device not found'));
     });
   });
 
@@ -580,7 +805,7 @@ describe('FarmService', () => {
     const input = { command_type: IotCommandType.IRRIGATE, parameters: { duration_minutes: 30 } };
     const activeDevice = makeDevice({ is_active: true });
 
-    it('creates a PENDING tool call and publishes to AWS IoT', async () => {
+    it('creates a PENDING tool call and creates an IoT job', async () => {
       farmRepo.manager.findOne.mockResolvedValue(activeDevice);
       const saved = makeToolCall();
       iotToolCallRepo.save.mockResolvedValue(saved);
@@ -594,9 +819,10 @@ describe('FarmService', () => {
           requested_by: 'user',
         }),
       );
-      expect(mockIotDataInstance.publish).toHaveBeenCalledWith(
+      expect(mockIotInstance.createJob).toHaveBeenCalledWith(
         expect.objectContaining({
-          topic: `farm/farm-id-1/devices/${activeDevice.thing_name}/commands`,
+          jobId: saved.id,
+          targets: [activeDevice.thing_arn],
         }),
       );
       expect(result).toBe(saved);
@@ -613,13 +839,11 @@ describe('FarmService', () => {
       );
     });
 
-    it('skips MQTT publish when IotData client is not configured', async () => {
+    it('skips job creation when IoT client is not configured', async () => {
       configService.get.mockImplementation((key: string) => {
-        if (key === 'IOT_DATA_ENDPOINT') return undefined;
         const config: Record<string, string> = {
-          IOT_REGION: 'us-east-1',
-          IOT_ACCESS_KEY_ID: 'key',
-          IOT_SECRET_ACCESS_KEY: 'secret',
+          IOT_DATA_ENDPOINT: 'https://xxx-ats.iot.us-east-1.amazonaws.com',
+          IOT_WEBHOOK_SECRET: 'test-webhook-secret',
         };
         return config[key];
       });
@@ -628,7 +852,7 @@ describe('FarmService', () => {
 
       await service.triggerIotDevice('farmer-id-1', 'farm-id-1', 'device-id-1', input);
 
-      expect(mockIotDataInstance.publish).not.toHaveBeenCalled();
+      expect(mockIotInstance.createJob).not.toHaveBeenCalled();
     });
 
     it('throws BadRequestException when device is not found', async () => {
@@ -706,6 +930,36 @@ describe('FarmService', () => {
       expect(result.farmId).toBe('farm-id-1');
     });
 
+    it('maps SUCCEEDED (AWS Jobs status) to COMPLETED', async () => {
+      const toolCall = makeToolCall({
+        iot_device: makeDevice({ farm: { id: 'farm-id-1' } as any }),
+      });
+      iotToolCallRepo.findOne.mockResolvedValue(toolCall);
+      iotToolCallRepo.save.mockImplementation(async (tc: any) => tc);
+
+      const result = await service.handleIotWebhook(
+        { tool_call_id: 'tc-id-1', status: 'SUCCEEDED' },
+        'test-webhook-secret',
+      );
+
+      expect(result.status).toBe(IotToolCallStatus.COMPLETED);
+    });
+
+    it('updates tool call to IN_PROGRESS', async () => {
+      const toolCall = makeToolCall({
+        iot_device: makeDevice({ farm: { id: 'farm-id-1' } as any }),
+      });
+      iotToolCallRepo.findOne.mockResolvedValue(toolCall);
+      iotToolCallRepo.save.mockImplementation(async (tc: any) => tc);
+
+      const result = await service.handleIotWebhook(
+        { tool_call_id: 'tc-id-1', status: 'IN_PROGRESS' },
+        'test-webhook-secret',
+      );
+
+      expect(result.status).toBe(IotToolCallStatus.IN_PROGRESS);
+    });
+
     it('updates tool call to FAILED', async () => {
       const toolCall = makeToolCall({
         iot_device: makeDevice({ farm: { id: 'farm-id-1' } as any }),
@@ -758,6 +1012,110 @@ describe('FarmService', () => {
       );
 
       expect(result.status).toBe(IotToolCallStatus.COMPLETED);
+    });
+  });
+
+  describe('setupIotRule', () => {
+    beforeEach(() => {
+      configService.get.mockImplementation((key: string) => {
+        const config: Record<string, string> = {
+          IOT_REGION: 'us-east-1',
+          IOT_ACCESS_KEY_ID: 'iot-access-key',
+          IOT_SECRET_ACCESS_KEY: 'iot-secret-key',
+          IOT_WEBHOOK_SECRET: 'test-webhook-secret',
+          APP_BASE_URL: 'https://api.example.com',
+        };
+        return config[key];
+      });
+    });
+
+    it('creates the IoT topic rule with correct SQL and webhook URL', async () => {
+      await service.setupIotRule();
+
+      expect(mockIotInstance.createTopicRule).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ruleName: 'BeorchidIotJobUpdates',
+          topicRulePayload: expect.objectContaining({
+            sql: expect.stringContaining('$aws/things/+/jobs/+/update/accepted'),
+            actions: expect.arrayContaining([
+              expect.objectContaining({
+                http: expect.objectContaining({
+                  url: 'https://api.example.com/api/iot/webhook',
+                  confirmationUrl: 'https://api.example.com/api/iot/webhook/confirm',
+                }),
+              }),
+            ]),
+          }),
+        }),
+      );
+    });
+
+    it('includes x-iot-secret header in the rule action', async () => {
+      await service.setupIotRule();
+
+      const call = mockIotInstance.createTopicRule.mock.calls[0][0];
+      const headers = call.topicRulePayload.actions[0].http.headers;
+      expect(headers).toContainEqual({ key: 'x-iot-secret', value: 'test-webhook-secret' });
+    });
+
+    it('silently ignores ResourceAlreadyExistsException', async () => {
+      const err: any = new Error('already exists');
+      err.code = 'ResourceAlreadyExistsException';
+      mockIotInstance.createTopicRule.mockReturnValue({
+        promise: jest.fn().mockRejectedValue(err),
+      });
+
+      await expect(service.setupIotRule()).resolves.toBeUndefined();
+    });
+
+    it('re-throws unexpected errors from createTopicRule', async () => {
+      const err = new Error('network failure');
+      mockIotInstance.createTopicRule.mockReturnValue({
+        promise: jest.fn().mockRejectedValue(err),
+      });
+
+      await expect(service.setupIotRule()).rejects.toThrow('network failure');
+    });
+
+    it('is a no-op when IoT credentials are not configured', async () => {
+      configService.get.mockReturnValue(undefined);
+
+      await service.setupIotRule();
+
+      expect(mockIotInstance.createTopicRule).not.toHaveBeenCalled();
+    });
+
+    it('is a no-op when APP_BASE_URL is not set', async () => {
+      configService.get.mockImplementation((key: string) => {
+        const config: Record<string, string> = {
+          IOT_REGION: 'us-east-1',
+          IOT_ACCESS_KEY_ID: 'iot-access-key',
+          IOT_SECRET_ACCESS_KEY: 'iot-secret-key',
+        };
+        return config[key];
+      });
+
+      await service.setupIotRule();
+
+      expect(mockIotInstance.createTopicRule).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('confirmIotDestination', () => {
+    it('calls confirmTopicRuleDestination with the provided token', async () => {
+      await service.confirmIotDestination('token-abc-123');
+
+      expect(mockIotInstance.confirmTopicRuleDestination).toHaveBeenCalledWith({
+        confirmationToken: 'token-abc-123',
+      });
+    });
+
+    it('is a no-op when IoT credentials are not configured', async () => {
+      configService.get.mockReturnValue(undefined);
+
+      await service.confirmIotDestination('token-abc-123');
+
+      expect(mockIotInstance.confirmTopicRuleDestination).not.toHaveBeenCalled();
     });
   });
 });
