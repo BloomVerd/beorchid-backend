@@ -546,6 +546,7 @@ export class FarmService {
               `arn:aws:iot:us-east-1:784608886729:topicfilter/farms/${farmId}/${deviceId}/telemetry`,
               `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/*`,
               `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/notify-next`,
+              `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/$next/get/accepted`,
             ],
           },
           {
