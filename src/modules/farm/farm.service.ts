@@ -6,7 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as AWS from 'aws-sdk';
-import archiver from 'archiver';
+import * as archiver from 'archiver';
 import { v4 as uuidv4 } from 'uuid';
 import { PassThrough } from 'stream';
 import { Between, FindOptionsWhere, Repository } from 'typeorm';
