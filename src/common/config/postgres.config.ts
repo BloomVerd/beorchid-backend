@@ -7,7 +7,7 @@ export const defaultPostgresDBConnection = (
 ): TypeOrmModuleOptions => ({
   type: 'postgres',
   autoLoadEntities: true,
-  synchronize: configService.get('NODE_ENV') !== 'production',
+  synchronize: false,
   url: configService.get('DATABASE_URL'),
   ssl: { rejectUnauthorized: false },
   migrations: [join(__dirname, '..', '..', 'database', 'migrations', '*.{ts,js}')],
