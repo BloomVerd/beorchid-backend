@@ -10,6 +10,8 @@ import { DiseaseAlert } from './entities/disease-alert.entity';
 import { HealthAlert } from './entities/health-alert.entity';
 import { SensorHistoryPoint } from './entities/sensor-history-point.entity';
 import { YieldComparison } from './entities/yield-comparison.entity';
+import { Prediction } from '../predictions/entities/prediction.entity';
+import { FarmerSettingsService } from '../farmer/farmer-settings.service';
 
 const makeJob = (data: object, name = 'compute-health-batch') => ({ name, data });
 
@@ -23,6 +25,7 @@ const makeFarm = (): Farm =>
     size_unit: 'HECTARES',
     soil_type: 'LOAM',
     farm_type: 'FIELD',
+    farmer: { id: 'farmer-1' },
   }) as any as Farm;
 
 const makeTelemetryItem = () => ({
@@ -89,6 +92,8 @@ describe('HealthConsumer', () => {
   let healthAlertRepo: { create: jest.Mock; save: jest.Mock };
   let sensorRepo: { find: jest.Mock; create: jest.Mock; save: jest.Mock };
   let yieldRepo: { find: jest.Mock; create: jest.Mock; save: jest.Mock };
+  let predictionRepo: { find: jest.Mock };
+  let farmerSettingsService: { getOrCreate: jest.Mock };
   let anthropicCreate: jest.Mock;
   let dynamodbSend: jest.Mock;
 
@@ -123,6 +128,10 @@ describe('HealthConsumer', () => {
       create: jest.fn().mockImplementation((d) => d),
       save: jest.fn().mockResolvedValue([]),
     };
+    predictionRepo = { find: jest.fn().mockResolvedValue([]) };
+    farmerSettingsService = {
+      getOrCreate: jest.fn().mockResolvedValue({ farmDataLookbackSeconds: 3600 }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -136,6 +145,8 @@ describe('HealthConsumer', () => {
         { provide: getRepositoryToken(HealthAlert), useValue: healthAlertRepo },
         { provide: getRepositoryToken(SensorHistoryPoint), useValue: sensorRepo },
         { provide: getRepositoryToken(YieldComparison), useValue: yieldRepo },
+        { provide: getRepositoryToken(Prediction), useValue: predictionRepo },
+        { provide: FarmerSettingsService, useValue: farmerSettingsService },
       ],
     }).compile();
 

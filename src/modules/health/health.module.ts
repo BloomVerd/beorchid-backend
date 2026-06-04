@@ -9,6 +9,7 @@ import { DiseaseAlert } from './entities/disease-alert.entity';
 import { HealthAlert } from './entities/health-alert.entity';
 import { SensorHistoryPoint } from './entities/sensor-history-point.entity';
 import { YieldComparison } from './entities/yield-comparison.entity';
+import { Prediction } from '../predictions/entities/prediction.entity';
 import { HealthResolver } from './health.resolver';
 import { HealthService } from './health.service';
 import { HealthProducer } from './health.producer';
@@ -31,6 +32,7 @@ import { JwtStrategy } from 'src/common/strategies';
       HealthAlert,
       SensorHistoryPoint,
       YieldComparison,
+      Prediction,
     ]),
     JwtModule.registerAsync({
       imports: [ConfigModule],

@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Between, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import Anthropic from '@anthropic-ai/sdk';
 import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
@@ -21,6 +21,8 @@ import {
   GrowthStage,
 } from './entities/health.enums';
 import { CropType } from '../farm/entities/farm.entity';
+import { Prediction } from '../predictions/entities/prediction.entity';
+import { FarmerSettingsService } from '../farmer/farmer-settings.service';
 
 interface HealthJson {
   overall_score: number;
@@ -104,6 +106,9 @@ export class HealthConsumer extends WorkerHost {
     private readonly sensorRepo: Repository<SensorHistoryPoint>,
     @InjectRepository(YieldComparison)
     private readonly yieldRepo: Repository<YieldComparison>,
+    @InjectRepository(Prediction)
+    private readonly predictionRepo: Repository<Prediction>,
+    private readonly farmerSettingsService: FarmerSettingsService,
   ) {
     super();
     this.anthropic = new Anthropic({
@@ -125,18 +130,57 @@ export class HealthConsumer extends WorkerHost {
   }
 
   private async computeFarmHealth(farmId: string): Promise<void> {
-    const [farm, iotDevices, telemetry, recentYields] = await Promise.all([
-      this.farmRepo.findOne({ where: { id: farmId } }),
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() + diffToMonday);
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const farm = await this.farmRepo.findOne({
+      where: { id: farmId },
+      relations: ['farmer'],
+    });
+    const settings = farm?.farmer
+      ? await this.farmerSettingsService.getOrCreate(farm.farmer.id)
+      : null;
+    const lookbackSeconds = settings?.farmDataLookbackSeconds ?? 3600;
+
+    const [
+      iotDevices,
+      telemetry,
+      recentYields,
+      weekPredictions,
+      sensorHistory,
+    ] = await Promise.all([
       this.iotDeviceRepo.find({ where: { farm: { id: farmId } } }),
-      this.queryTelemetry(farmId, 24),
+      this.queryTelemetry(farmId, lookbackSeconds),
       this.yieldRepo.find({
+        where: { farmHealth: { farm: { id: farmId } } },
+        order: { createdAt: 'DESC' },
+        take: 10,
+      }),
+      this.predictionRepo.find({
+        where: { farm: { id: farmId }, createdAt: Between(weekStart, weekEnd) },
+      }),
+      this.sensorRepo.find({
         where: { farmHealth: { farm: { id: farmId } } },
         order: { createdAt: 'DESC' },
         take: 10,
       }),
     ]);
 
-    const context = this.buildContext(farm, iotDevices, telemetry, recentYields);
+    const context = this.buildContext(
+      farm,
+      iotDevices,
+      telemetry,
+      recentYields,
+      weekPredictions,
+      sensorHistory,
+    );
 
     const message = await this.anthropic.messages.create({
       model: 'claude-sonnet-4-6',
@@ -272,6 +316,8 @@ export class HealthConsumer extends WorkerHost {
     iotDevices: IotDevice[],
     telemetry: TelemetryItem[],
     recentYields: YieldComparison[],
+    weekPredictions: Prediction[],
+    sensorHistory: SensorHistoryPoint[],
   ): string {
     const parts: string[] = [];
 
@@ -316,11 +362,37 @@ export class HealthConsumer extends WorkerHost {
       parts.push('YIELD DATA: none available');
     }
 
+    if (weekPredictions.length) {
+      const preds = weekPredictions
+        .map(
+          (p) =>
+            `type=${p.prediction_type} risk=${p.risk_level ?? 'n/a'} at=${p.lat},${p.lon} on=${p.createdAt.toISOString().split('T')[0]}`,
+        )
+        .join('; ');
+      parts.push(`WEEKLY PREDICTIONS (${weekPredictions.length}): ${preds}`);
+    } else {
+      parts.push('WEEKLY PREDICTIONS: none this week');
+    }
+
+    if (sensorHistory.length) {
+      const hist = sensorHistory
+        .map(
+          (s) =>
+            `date=${s.date} moisture=${s.moisture} temp=${s.temperature} N=${s.nitrogen} P=${s.phosphorus} K=${s.potassium}`,
+        )
+        .join('; ');
+      parts.push(
+        `SENSOR HISTORY (last ${sensorHistory.length} assessments): ${hist}`,
+      );
+    } else {
+      parts.push('SENSOR HISTORY: none available');
+    }
+
     return parts.join('\n');
   }
 
   private buildSystemPrompt(): string {
-    return `You are an agricultural health analyst. Given raw farm telemetry, produce a structured health assessment.
+    return `You are an agricultural health analyst. Given raw farm telemetry, weekly AI predictions, and historical sensor data, produce a structured health assessment.
 
 Return ONLY valid JSON — no markdown, no explanation, no code fences. Use this exact shape:
 {
@@ -386,7 +458,9 @@ Rules:
 - All scores are floats on a 0-100 scale (higher = healthier/better), except weather_stress (0=no stress, 100=extreme stress) and disease_risk (0-100 risk)
 - Always include at least one entry in crop_field_health derived from the farm crop type
 - Omit disease_alerts and health_alerts arrays only if there are genuinely none
-- Keep all string values concise and suitable for a mobile UI card`;
+- Keep all string values concise and suitable for a mobile UI card
+- Factor in WEEKLY PREDICTIONS when computing disease_risk and health_alerts (HIGH risk predictions raise disease_risk)
+- Use SENSOR HISTORY to identify moisture and nutrient trends when live sensor readings are sparse`;
   }
 
   private extractJson(text: string): string {
