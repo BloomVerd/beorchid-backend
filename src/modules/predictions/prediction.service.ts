@@ -8,7 +8,6 @@ import { Between, FindOptionsWhere, Repository } from 'typeorm';
 import { Prediction } from './entities/prediction.entity';
 import { PredictionRange } from './entities/prediction-range.entity';
 import { Farm } from '../farm/entities/farm.entity';
-import { ImageData } from '../farm/entities/image-data.entity';
 import { Farmer } from '../farmer/entities/farmer.entity';
 import { PredictionProducer } from './prediction.producer';
 import { FarmerSettingsService } from '../farmer/farmer-settings.service';
@@ -125,45 +124,4 @@ export class PredictionService {
     return { data, total, page, lastPage: Math.ceil(total / limit) || 1 };
   }
 
-  async createPredictions(farmId: string): Promise<void> {
-    const farm = await this.predictionRepository.manager.findOne(Farm, {
-      where: { id: farmId },
-      relations: ['farm_images'],
-    });
-
-    if (!farm) throw new NotFoundException('Farm not found');
-
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
-    const week = Math.ceil(now.getDate() / 7);
-    const dayStart = (week - 1) * 7 + 1;
-    const weekStart = new Date(year, month - 1, dayStart, 0, 0, 0, 0);
-    const lastDayOfMonth = new Date(year, month, 0).getDate();
-    const dayEnd = week >= 4 ? lastDayOfMonth : week * 7;
-    const weekEnd = new Date(year, month - 1, dayEnd, 23, 59, 59, 999);
-
-    await this.predictionRepository.delete({
-      farm: { id: farmId },
-      createdAt: Between(weekStart, weekEnd) as any,
-    });
-
-    const records: Prediction[] = [];
-    for (const image of farm.farm_images) {
-      for (const predType of image.prediction_types) {
-        const prediction = this.predictionRepository.create({
-          farm: { id: farmId } as Farm,
-          image: { id: image.id } as ImageData,
-          lat: image.lat,
-          lon: image.lon,
-          prediction_type: predType,
-        });
-        records.push(prediction);
-      }
-    }
-
-    if (records.length > 0) {
-      await this.predictionRepository.save(records);
-    }
-  }
 }
