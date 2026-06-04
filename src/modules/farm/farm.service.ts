@@ -1133,7 +1133,7 @@ runSample()
         .createTopicRule({
           ruleName,
           topicRulePayload: {
-            sql: "SELECT topic(5) AS tool_call_id, status, statusDetails AS response FROM '$aws/things/+/jobs/+/update'",
+            sql: "SELECT topic(5) AS tool_call_id, status, statusDetails AS response FROM '$aws/things/+/jobs/+/update/accepted'",
             actions: [
               {
                 http: {
