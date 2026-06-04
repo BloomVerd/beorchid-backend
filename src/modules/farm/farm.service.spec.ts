@@ -31,23 +31,15 @@ jest.mock('aws-sdk', () => ({
   IotData: jest.fn().mockImplementation(() => mockIotDataInstance),
 }));
 
-let pipedStream: any = null;
-const mockArchiveInstance = {
-  on: jest.fn(),
-  pipe: jest.fn().mockImplementation((stream: any) => {
-    pipedStream = stream;
-  }),
-  append: jest.fn(),
-  finalize: jest.fn().mockImplementation(() => {
-    setImmediate(() => {
-      if (pipedStream) {
-        pipedStream.write(Buffer.from('PK'));
-        pipedStream.end();
-      }
-    });
-  }),
+const mockZipInstance = {
+  file: jest.fn(),
+  generateAsync: jest.fn().mockResolvedValue(Buffer.from('PK')),
 };
-jest.mock('archiver', () => jest.fn().mockImplementation(() => mockArchiveInstance));
+
+jest.mock('jszip', () => ({
+  __esModule: true,
+  default: jest.fn().mockImplementation(() => mockZipInstance),
+}));
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -241,20 +233,8 @@ describe('FarmService', () => {
     Object.values(mockIotDataInstance).forEach((fn) => (fn as jest.Mock).mockClear());
     mockIotDataInstance.publish.mockReturnValue(makeIotPromise({}));
 
-    // Reset archiver mock between tests
-    pipedStream = null;
-    Object.values(mockArchiveInstance).forEach((fn) => (fn as jest.Mock).mockClear());
-    mockArchiveInstance.pipe.mockImplementation((stream: any) => {
-      pipedStream = stream;
-    });
-    mockArchiveInstance.finalize.mockImplementation(() => {
-      setImmediate(() => {
-        if (pipedStream) {
-          pipedStream.write(Buffer.from('PK'));
-          pipedStream.end();
-        }
-      });
-    });
+    mockZipInstance.file.mockClear();
+    mockZipInstance.generateAsync.mockResolvedValue(Buffer.from('PK'));
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -585,15 +565,15 @@ describe('FarmService', () => {
 
       await service.downloadIotDevicePackage('farmer-id-1', 'farm-id-1', 'device-uuid-1');
 
-      const appendedNames = mockArchiveInstance.append.mock.calls.map(
-        (call: any[]) => call[1].name,
+      const fileNames = mockZipInstance.file.mock.calls.map(
+        (call: any[]) => call[0],
       );
-      expect(appendedNames).toContain('farm_farm-id-1_device-uuid-1-Policy');
-      expect(appendedNames).toContain('farm_farm-id-1_device-uuid-1.cert.pem');
-      expect(appendedNames).toContain('farm_farm-id-1_device-uuid-1.private.key');
-      expect(appendedNames).toContain('farm_farm-id-1_device-uuid-1.public.key');
-      expect(appendedNames).toContain('start.sh');
-      expect(appendedNames).toContain('index.ts');
+      expect(fileNames).toContain('farm_farm-id-1_device-uuid-1-Policy');
+      expect(fileNames).toContain('farm_farm-id-1_device-uuid-1.cert.pem');
+      expect(fileNames).toContain('farm_farm-id-1_device-uuid-1.private.key');
+      expect(fileNames).toContain('farm_farm-id-1_device-uuid-1.public.key');
+      expect(fileNames).toContain('start.sh');
+      expect(fileNames).toContain('index.ts');
     });
 
     it('embeds correct farmId and deviceId in the policy JSON', async () => {
@@ -602,10 +582,10 @@ describe('FarmService', () => {
 
       await service.downloadIotDevicePackage('farmer-id-1', 'farm-id-1', 'device-uuid-1');
 
-      const policyCall = mockArchiveInstance.append.mock.calls.find(
-        (call: any[]) => call[1].name === 'farm_farm-id-1_device-uuid-1-Policy',
+      const policyCall = mockZipInstance.file.mock.calls.find(
+        (call: any[]) => call[0] === 'farm_farm-id-1_device-uuid-1-Policy',
       );
-      const policyDoc = JSON.parse(policyCall[0]);
+      const policyDoc = JSON.parse(policyCall[1]);
       const publishArn = policyDoc.Statement[0].Resource[0];
       expect(publishArn).toBe(
         'arn:aws:iot:us-east-1:784608886729:topic/farms/farm-id-1/device-uuid-1/telemetry',
@@ -618,15 +598,15 @@ describe('FarmService', () => {
 
       await service.downloadIotDevicePackage('farmer-id-1', 'farm-id-1', 'device-uuid-1');
 
-      const certCall = mockArchiveInstance.append.mock.calls.find(
-        (call: any[]) => call[1].name === 'farm_farm-id-1_device-uuid-1.cert.pem',
+      const certCall = mockZipInstance.file.mock.calls.find(
+        (call: any[]) => call[0] === 'farm_farm-id-1_device-uuid-1.cert.pem',
       );
-      expect(certCall[0]).toBe('cert-pem');
+      expect(certCall[1]).toBe('cert-pem');
 
-      const keyCall = mockArchiveInstance.append.mock.calls.find(
-        (call: any[]) => call[1].name === 'farm_farm-id-1_device-uuid-1.private.key',
+      const keyCall = mockZipInstance.file.mock.calls.find(
+        (call: any[]) => call[0] === 'farm_farm-id-1_device-uuid-1.private.key',
       );
-      expect(keyCall[0]).toBe('private-key');
+      expect(keyCall[1]).toBe('private-key');
     });
 
     it('uses empty string when cert fields have been cleared', async () => {
@@ -639,10 +619,10 @@ describe('FarmService', () => {
 
       await service.downloadIotDevicePackage('farmer-id-1', 'farm-id-1', 'device-uuid-1');
 
-      const certCall = mockArchiveInstance.append.mock.calls.find(
-        (call: any[]) => call[1].name === 'farm_farm-id-1_device-uuid-1.cert.pem',
+      const certCall = mockZipInstance.file.mock.calls.find(
+        (call: any[]) => call[0] === 'farm_farm-id-1_device-uuid-1.cert.pem',
       );
-      expect(certCall[0]).toBe('');
+      expect(certCall[1]).toBe('');
     });
 
     it('embeds farmId and deviceId in start.sh', async () => {
@@ -651,11 +631,11 @@ describe('FarmService', () => {
 
       await service.downloadIotDevicePackage('farmer-id-1', 'farm-id-1', 'device-uuid-1');
 
-      const shCall = mockArchiveInstance.append.mock.calls.find(
-        (call: any[]) => call[1].name === 'start.sh',
+      const shCall = mockZipInstance.file.mock.calls.find(
+        (call: any[]) => call[0] === 'start.sh',
       );
-      expect(shCall[0]).toContain('farm_farm-id-1_device-uuid-1.private.key');
-      expect(shCall[0]).toContain('farms/farm-id-1/device-uuid-1/telemetry');
+      expect(shCall[1]).toContain('farm_farm-id-1_device-uuid-1.private.key');
+      expect(shCall[1]).toContain('farms/farm-id-1/device-uuid-1/telemetry');
     });
 
     it('embeds farmId and deviceId as constants in index.ts', async () => {
@@ -664,11 +644,11 @@ describe('FarmService', () => {
 
       await service.downloadIotDevicePackage('farmer-id-1', 'farm-id-1', 'device-uuid-1');
 
-      const tsCall = mockArchiveInstance.append.mock.calls.find(
-        (call: any[]) => call[1].name === 'index.ts',
+      const tsCall = mockZipInstance.file.mock.calls.find(
+        (call: any[]) => call[0] === 'index.ts',
       );
-      expect(tsCall[0]).toContain('const FARM_ID = "farm-id-1"');
-      expect(tsCall[0]).toContain('const DEVICE_ID = "device-uuid-1"');
+      expect(tsCall[1]).toContain('const FARM_ID = "farm-id-1"');
+      expect(tsCall[1]).toContain('const DEVICE_ID = "device-uuid-1"');
     });
 
     it('throws BadRequestException when device is not found', async () => {

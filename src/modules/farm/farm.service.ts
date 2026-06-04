@@ -6,9 +6,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as AWS from 'aws-sdk';
-import archiver = require('archiver');
+import JSZip from 'jszip';
 import { v4 as uuidv4 } from 'uuid';
-import { PassThrough } from 'stream';
 import { Between, FindOptionsWhere, Repository } from 'typeorm';
 import { Farm, SetupStatus } from './entities/farm.entity';
 import { IotDevice } from './entities/iot-device.entity';
@@ -563,31 +562,25 @@ export class FarmService {
     const indexTs = this.buildIndexTs(farmId, deviceId);
     const zipFilename = `farm_${farmId}_${deviceId}.zip`;
 
-    const buffer = await new Promise<Buffer>((resolve, reject) => {
-      const passThrough = new PassThrough();
-      const chunks: Buffer[] = [];
-      passThrough.on('data', (chunk: Buffer) => chunks.push(chunk));
-      passThrough.on('end', () => resolve(Buffer.concat(chunks)));
-      passThrough.on('error', reject);
+    const zip = new JSZip();
+    zip.file(policyName, policyContent);
+    zip.file(
+      `farm_${farmId}_${deviceId}.cert.pem`,
+      device.certificate_pem ?? '',
+    );
+    zip.file(
+      `farm_${farmId}_${deviceId}.private.key`,
+      device.private_key ?? '',
+    );
+    zip.file(`farm_${farmId}_${deviceId}.public.key`, device.public_key ?? '');
+    zip.file('start.sh', startSh, { unixPermissions: 0o755 });
+    zip.file('index.ts', indexTs);
 
-      const archive = archiver('zip', { zlib: { level: 9 } });
-      archive.on('error', reject);
-      archive.pipe(passThrough);
-
-      archive.append(policyContent, { name: policyName });
-      archive.append(device.certificate_pem ?? '', {
-        name: `farm_${farmId}_${deviceId}.cert.pem`,
-      });
-      archive.append(device.private_key ?? '', {
-        name: `farm_${farmId}_${deviceId}.private.key`,
-      });
-      archive.append(device.public_key ?? '', {
-        name: `farm_${farmId}_${deviceId}.public.key`,
-      });
-      archive.append(startSh, { name: 'start.sh', mode: 0o755 });
-      archive.append(indexTs, { name: 'index.ts' });
-
-      archive.finalize();
+    const buffer = await zip.generateAsync({
+      type: 'nodebuffer',
+      compression: 'DEFLATE',
+      compressionOptions: { level: 9 },
+      platform: 'UNIX',
     });
 
     return { buffer, filename: zipFilename };
