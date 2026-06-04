@@ -23,6 +23,8 @@ import {
 import { CropType } from '../farm/entities/farm.entity';
 import { Prediction } from '../predictions/entities/prediction.entity';
 import { FarmerSettingsService } from '../farmer/farmer-settings.service';
+import { FarmService } from '../farm/farm.service';
+import { IotCommandType } from '../farm/entities/iot-tool-call.entity';
 
 interface HealthJson {
   overall_score: number;
@@ -109,6 +111,7 @@ export class HealthConsumer extends WorkerHost {
     @InjectRepository(Prediction)
     private readonly predictionRepo: Repository<Prediction>,
     private readonly farmerSettingsService: FarmerSettingsService,
+    private readonly farmService: FarmService,
   ) {
     super();
     this.anthropic = new Anthropic({
@@ -182,17 +185,66 @@ export class HealthConsumer extends WorkerHost {
       sensorHistory,
     );
 
-    const message = await this.anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
-      system: this.buildSystemPrompt(),
-      messages: [{ role: 'user', content: context }],
-    });
+    const messages: Anthropic.MessageParam[] = [
+      { role: 'user', content: context },
+    ];
+    let rawText = '';
 
-    const rawText = message.content
-      .filter((b) => b.type === 'text')
-      .map((b) => (b as Anthropic.TextBlock).text)
-      .join('');
+    for (let round = 0; round < 5; round++) {
+      const response = await this.anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2048,
+        system: this.buildSystemPrompt(),
+        tools: [this.buildIotDeviceTool()],
+        messages,
+      });
+
+      const textBlocks = response.content.filter((b) => b.type === 'text');
+      if (textBlocks.length) {
+        rawText = textBlocks
+          .map((b) => (b as Anthropic.TextBlock).text)
+          .join('');
+      }
+
+      if (response.stop_reason !== 'tool_use') break;
+
+      messages.push({ role: 'assistant', content: response.content });
+
+      const toolResults: Anthropic.ToolResultBlockParam[] = await Promise.all(
+        response.content
+          .filter((b) => b.type === 'tool_use')
+          .map(async (block) => {
+            const toolUse = block as Anthropic.ToolUseBlock;
+            const input = toolUse.input as {
+              device_id: string;
+              command_type: string;
+              parameters?: Record<string, unknown>;
+            };
+            let content: string;
+            try {
+              const toolCall = await this.farmService.triggerIotDevice(
+                farm?.farmer?.id ?? null,
+                farmId,
+                input.device_id,
+                {
+                  command_type: input.command_type as IotCommandType,
+                  parameters: input.parameters,
+                },
+              );
+              content = `Command dispatched: tool_call_id=${toolCall.id} status=${toolCall.status}`;
+            } catch (err) {
+              content = `Error: ${(err as Error).message}`;
+            }
+            return {
+              type: 'tool_result' as const,
+              tool_use_id: toolUse.id,
+              content,
+            };
+          }),
+      );
+
+      messages.push({ role: 'user', content: toolResults });
+    }
 
     const json = this.extractJson(rawText);
     const parsed: HealthJson = JSON.parse(json);
@@ -343,7 +395,10 @@ export class HealthConsumer extends WorkerHost {
 
     if (iotDevices.length) {
       const devices = iotDevices
-        .map((d) => `${d.label} (${d.device_type}) active=${d.is_active}`)
+        .map(
+          (d) =>
+            `id=${d.id} label=${d.label} type=${d.device_type} active=${d.is_active}`,
+        )
         .join('; ');
       parts.push(`IOT DEVICES: ${devices}`);
     } else {
@@ -389,6 +444,35 @@ export class HealthConsumer extends WorkerHost {
     }
 
     return parts.join('\n');
+  }
+
+  private buildIotDeviceTool(): Anthropic.Tool {
+    return {
+      name: 'trigger_iot_device',
+      description:
+        'Trigger a command on a registered IoT device. Use this to act on analysis findings — e.g. start irrigation when soil moisture is critically low, capture a field image when disease probability is high. Only trigger devices listed as active in the context.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          device_id: {
+            type: 'string',
+            description:
+              'The id field of the IoT device from the IOT DEVICES context',
+          },
+          command_type: {
+            type: 'string',
+            enum: Object.values(IotCommandType),
+            description: 'Command to send to the device',
+          },
+          parameters: {
+            type: 'object',
+            description:
+              'Optional command parameters (e.g. { "duration_minutes": 30 } for irrigation)',
+          },
+        },
+        required: ['device_id', 'command_type'],
+      },
+    };
   }
 
   private buildSystemPrompt(): string {
@@ -460,7 +544,8 @@ Rules:
 - Omit disease_alerts and health_alerts arrays only if there are genuinely none
 - Keep all string values concise and suitable for a mobile UI card
 - Factor in WEEKLY PREDICTIONS when computing disease_risk and health_alerts (HIGH risk predictions raise disease_risk)
-- Use SENSOR HISTORY to identify moisture and nutrient trends when live sensor readings are sparse`;
+- Use SENSOR HISTORY to identify moisture and nutrient trends when live sensor readings are sparse
+- Use the trigger_iot_device tool before finalising your assessment when conditions warrant immediate action (e.g. soil moisture critically low → IRRIGATE, high disease probability → CAPTURE_IMAGE). Only call it for active devices.`;
   }
 
   private extractJson(text: string): string {

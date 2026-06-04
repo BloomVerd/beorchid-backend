@@ -31,35 +31,73 @@ export class HealthService {
     page: number,
     limit: number,
   ): Promise<PaginatedFarmHealthSummaries> {
-    const [records, total] = await this.farmHealthRepository.findAndCount({
-      where: { farm: { farmer: { id: farmerId } } },
-      relations: ['farm', 'health_alerts'],
-      order: { computed_at: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
+    const countRow = await this.farmHealthRepository
+      .createQueryBuilder('fh')
+      .select('COUNT(DISTINCT fh.farm_id)', 'count')
+      .innerJoin('fh.farm', 'farm')
+      .innerJoin('farm.farmer', 'farmer')
+      .where('farmer.id = :farmerId', { farmerId })
+      .getRawOne<{ count: string }>();
+    const total = parseInt(countRow?.count ?? '0', 10);
 
-    const data: FarmHealthSummary[] = records.map((fh) => {
-      const topAlert =
-        fh.health_alerts?.length > 0
-          ? fh.health_alerts.reduce((best, alert) =>
-              SEVERITY_ORDER[alert.severity] > SEVERITY_ORDER[best.severity]
-                ? alert
-                : best,
-            )
-          : undefined;
+    const farmIdRows = await this.farmHealthRepository
+      .createQueryBuilder('fh')
+      .select('fh.farm_id', 'farmId')
+      .innerJoin('fh.farm', 'farm')
+      .innerJoin('farm.farmer', 'farmer')
+      .where('farmer.id = :farmerId', { farmerId })
+      .groupBy('fh.farm_id')
+      .orderBy('MAX(fh.computed_at)', 'DESC')
+      .offset((page - 1) * limit)
+      .limit(limit)
+      .getRawMany<{ farmId: string }>();
+    const farmIds = farmIdRows.map((r) => r.farmId);
 
-      return {
-        farmId: fh.farm.id,
-        farmName: fh.farm.name,
-        cropType: fh.farm.crop_type,
-        area: fh.farm.farm_size,
-        healthScore: fh,
-        topAlert,
-      };
-    });
+    if (!farmIds.length) {
+      return { data: [], total, page, lastPage: Math.ceil(total / limit) || 1 };
+    }
 
-    return { data, total, page, lastPage: Math.ceil(total / limit) };
+    const records = await this.farmHealthRepository
+      .createQueryBuilder('fh')
+      .innerJoinAndSelect('fh.farm', 'farm')
+      .leftJoinAndSelect('fh.health_alerts', 'alerts')
+      .where((qb) => {
+        const sub = qb
+          .subQuery()
+          .select('MAX(sub.computed_at)')
+          .from(FarmHealth, 'sub')
+          .where('sub.farm_id = fh.farm_id')
+          .getQuery();
+        return `fh.computed_at = (${sub})`;
+      })
+      .andWhere('fh.farm_id IN (:...farmIds)', { farmIds })
+      .getMany();
+
+    const recordMap = new Map(records.map((r) => [r.farm.id, r]));
+    const data: FarmHealthSummary[] = farmIds
+      .map((id) => {
+        const fh = recordMap.get(id);
+        if (!fh) return null;
+        const topAlert =
+          fh.health_alerts?.length > 0
+            ? fh.health_alerts.reduce((best, alert) =>
+                SEVERITY_ORDER[alert.severity] > SEVERITY_ORDER[best.severity]
+                  ? alert
+                  : best,
+              )
+            : undefined;
+        return {
+          farmId: fh.farm.id,
+          farmName: fh.farm.name,
+          cropType: fh.farm.crop_type,
+          area: fh.farm.farm_size,
+          healthScore: fh,
+          topAlert,
+        };
+      })
+      .filter((s): s is FarmHealthSummary => s !== null);
+
+    return { data, total, page, lastPage: Math.ceil(total / limit) || 1 };
   }
 
   /**

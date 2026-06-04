@@ -12,6 +12,7 @@ import { SensorHistoryPoint } from './entities/sensor-history-point.entity';
 import { YieldComparison } from './entities/yield-comparison.entity';
 import { Prediction } from '../predictions/entities/prediction.entity';
 import { FarmerSettingsService } from '../farmer/farmer-settings.service';
+import { FarmService } from '../farm/farm.service';
 
 const makeJob = (data: object, name = 'compute-health-batch') => ({ name, data });
 
@@ -39,6 +40,7 @@ const makeTelemetryItem = () => ({
 });
 
 const makeClaudeHealthResponse = (overrides: object = {}) => ({
+  stop_reason: 'end_turn',
   content: [
     {
       type: 'text',
@@ -94,6 +96,7 @@ describe('HealthConsumer', () => {
   let yieldRepo: { find: jest.Mock; create: jest.Mock; save: jest.Mock };
   let predictionRepo: { find: jest.Mock };
   let farmerSettingsService: { getOrCreate: jest.Mock };
+  let farmService: { triggerIotDevice: jest.Mock };
   let anthropicCreate: jest.Mock;
   let dynamodbSend: jest.Mock;
 
@@ -132,6 +135,9 @@ describe('HealthConsumer', () => {
     farmerSettingsService = {
       getOrCreate: jest.fn().mockResolvedValue({ farmDataLookbackSeconds: 3600 }),
     };
+    farmService = {
+      triggerIotDevice: jest.fn().mockResolvedValue({ id: 'tool-call-1', status: 'PENDING' }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -147,6 +153,7 @@ describe('HealthConsumer', () => {
         { provide: getRepositoryToken(YieldComparison), useValue: yieldRepo },
         { provide: getRepositoryToken(Prediction), useValue: predictionRepo },
         { provide: FarmerSettingsService, useValue: farmerSettingsService },
+        { provide: FarmService, useValue: farmService },
       ],
     }).compile();
 
@@ -249,6 +256,43 @@ describe('HealthConsumer', () => {
 
       const savedCropFields = cropFieldHealthRepo.save.mock.calls[0][0];
       expect(savedCropFields[0].farmHealth).toEqual({ id: 'health-saved-1' });
+    });
+
+    it('executes IoT tool calls and feeds results back before producing final JSON', async () => {
+      const toolUseResponse = {
+        stop_reason: 'tool_use',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tu-1',
+            name: 'trigger_iot_device',
+            input: { device_id: 'device-uuid-1', command_type: 'IRRIGATE', parameters: { duration_minutes: 30 } },
+          },
+        ],
+      };
+      anthropicCreate
+        .mockResolvedValueOnce(toolUseResponse)
+        .mockResolvedValue(makeClaudeHealthResponse());
+
+      await consumer.process(makeJob({ farmIds: ['farm-1'] }) as any);
+
+      expect(farmService.triggerIotDevice).toHaveBeenCalledWith(
+        'farmer-1',
+        'farm-1',
+        'device-uuid-1',
+        { command_type: 'IRRIGATE', parameters: { duration_minutes: 30 } },
+      );
+      expect(anthropicCreate).toHaveBeenCalledTimes(2);
+      const secondCall = anthropicCreate.mock.calls[1][0];
+      const toolResultMsg = secondCall.messages.find(
+        (m: any) => m.role === 'user' && Array.isArray(m.content),
+      );
+      expect(toolResultMsg.content[0]).toMatchObject({
+        type: 'tool_result',
+        tool_use_id: 'tu-1',
+        content: expect.stringContaining('tool-call-1'),
+      });
+      expect(farmHealthRepo.save).toHaveBeenCalled();
     });
   });
 });
