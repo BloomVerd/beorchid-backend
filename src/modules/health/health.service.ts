@@ -33,7 +33,7 @@ export class HealthService {
   ): Promise<PaginatedFarmHealthSummaries> {
     const countRow = await this.farmHealthRepository
       .createQueryBuilder('fh')
-      .select('COUNT(DISTINCT fh.farm_id)', 'count')
+      .select('COUNT(DISTINCT fh."farmId")', 'count')
       .innerJoin('fh.farm', 'farm')
       .innerJoin('farm.farmer', 'farmer')
       .where('farmer.id = :farmerId', { farmerId })
@@ -42,11 +42,11 @@ export class HealthService {
 
     const farmIdRows = await this.farmHealthRepository
       .createQueryBuilder('fh')
-      .select('fh.farm_id', 'farmId')
+      .select('fh."farmId"', 'farmId')
       .innerJoin('fh.farm', 'farm')
       .innerJoin('farm.farmer', 'farmer')
       .where('farmer.id = :farmerId', { farmerId })
-      .groupBy('fh.farm_id')
+      .groupBy('fh."farmId"')
       .orderBy('MAX(fh.computed_at)', 'DESC')
       .offset((page - 1) * limit)
       .limit(limit)
@@ -66,7 +66,7 @@ export class HealthService {
           .subQuery()
           .select('MAX(sub.computed_at)')
           .from(FarmHealth, 'sub')
-          .where('sub.farm_id = fh.farm_id')
+          .where('sub."farmId" = fh."farmId"')
           .getQuery();
         return `fh.computed_at = (${sub})`;
       })
