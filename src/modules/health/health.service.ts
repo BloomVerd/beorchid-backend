@@ -70,7 +70,7 @@ export class HealthService {
           .getQuery();
         return `fh.computed_at = (${sub})`;
       })
-      .andWhere('fh.farm_id IN (:...farmIds)', { farmIds })
+      .andWhere('fh."farmId" IN (:...farmIds)', { farmIds })
       .getMany();
 
     const recordMap = new Map(records.map((r) => [r.farm.id, r]));
