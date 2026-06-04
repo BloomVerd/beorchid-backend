@@ -82,13 +82,11 @@ export class IotController {
           deviceId,
         );
       res.setHeader('Content-Type', 'application/zip');
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename=${filename}`,
-      );
+      res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
       res.setHeader('Content-Length', buffer.length);
       res.status(200).send(buffer);
     } catch (err) {
+      console.log('IOT download error:', err);
       if ((err as any)?.status === 400) {
         res.status(400).json({ message: (err as Error).message });
         return;
@@ -114,7 +112,12 @@ export class IotController {
   @Post('iot/webhook')
   async handleWebhook(
     @Headers('x-iot-secret') secret: string,
-    @Body() body: { tool_call_id: string; status: 'COMPLETED' | 'SUCCEEDED' | 'IN_PROGRESS' | 'FAILED'; response?: Record<string, unknown> },
+    @Body()
+    body: {
+      tool_call_id: string;
+      status: 'COMPLETED' | 'SUCCEEDED' | 'IN_PROGRESS' | 'FAILED';
+      response?: Record<string, unknown>;
+    },
     @Res() res: any,
   ): Promise<void> {
     let updated: Awaited<ReturnType<typeof this.farmService.handleIotWebhook>>;
