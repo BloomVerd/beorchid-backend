@@ -608,10 +608,10 @@ if [ ! -d ./aws-iot-device-sdk-js-v2 ]; then
   cd aws-iot-device-sdk-js-v2
   npm install
   # samples require their own install
+  cp index.ts aws-iot-device-sdk-js-v2/samples/node/mqtt/mqtt5_x509/index.ts
   cd samples/node/mqtt/mqtt5_x509
   npm install
   cd $CWD
-  cp index.ts aws-iot-device-sdk-js-v2/samples/node/mqtt/mqtt5_x509/index.ts
 fi
 
 # run pub/sub sample app using certificates downloaded in package
