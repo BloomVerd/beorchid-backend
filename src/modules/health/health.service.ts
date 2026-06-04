@@ -74,28 +74,28 @@ export class HealthService {
       .getMany();
 
     const recordMap = new Map(records.map((r) => [r.farm.id, r]));
-    const data: FarmHealthSummary[] = farmIds
-      .map((id) => {
-        const fh = recordMap.get(id);
-        if (!fh) return null;
-        const topAlert =
-          fh.health_alerts?.length > 0
-            ? fh.health_alerts.reduce((best, alert) =>
-                SEVERITY_ORDER[alert.severity] > SEVERITY_ORDER[best.severity]
-                  ? alert
-                  : best,
-              )
-            : undefined;
-        return {
+    const data: FarmHealthSummary[] = farmIds.flatMap((id) => {
+      const fh = recordMap.get(id);
+      if (!fh) return [];
+      const topAlert =
+        fh.health_alerts?.length > 0
+          ? fh.health_alerts.reduce((best, alert) =>
+              SEVERITY_ORDER[alert.severity] > SEVERITY_ORDER[best.severity]
+                ? alert
+                : best,
+            )
+          : undefined;
+      return [
+        {
           farmId: fh.farm.id,
           farmName: fh.farm.name,
           cropType: fh.farm.crop_type,
           area: fh.farm.farm_size,
           healthScore: fh,
           topAlert,
-        };
-      })
-      .filter((s): s is FarmHealthSummary => s !== null);
+        },
+      ];
+    });
 
     return { data, total, page, lastPage: Math.ceil(total / limit) || 1 };
   }
