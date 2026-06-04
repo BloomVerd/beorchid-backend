@@ -118,6 +118,11 @@ export class FarmService {
       );
       await em.save(newCoords);
 
+      const totalLat = newCoords.reduce((sum, c) => sum + c.lat, 0);
+      const totalLon = newCoords.reduce((sum, c) => sum + c.lon, 0);
+      farm.lat = totalLat / newCoords.length;
+      farm.lon = totalLon / newCoords.length;
+
       if (farm.setup_status === SetupStatus.PENDING) {
         farm.setup_status = SetupStatus.IN_PROGRESS;
       }
