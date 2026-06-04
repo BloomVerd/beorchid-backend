@@ -120,10 +120,12 @@ export class IotController {
     },
     @Res() res: any,
   ): Promise<void> {
+    console.log('IOT_WEBHOOK_DATA:', body, secret);
     let updated: Awaited<ReturnType<typeof this.farmService.handleIotWebhook>>;
     try {
       updated = await this.farmService.handleIotWebhook(body, secret);
     } catch (err) {
+      console.log('IOT_WEBHOOK_ERR', err);
       if (err instanceof UnauthorizedException) {
         res.status(401).json({ message: 'Unauthorized' });
         return;
