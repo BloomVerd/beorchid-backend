@@ -67,8 +67,8 @@ export class IotController {
   ): Promise<void> {
     let farmerId: string;
     try {
-      const payload = this.jwtService.verify(token) as { sub: string };
-      farmerId = payload.sub;
+      const payload = this.jwtService.verify(token) as { id: string };
+      farmerId = payload.id;
     } catch {
       res.status(401).json({ message: 'Invalid or expired token' });
       return;
