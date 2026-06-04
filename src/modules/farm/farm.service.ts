@@ -559,7 +559,7 @@ export class FarmService {
     );
 
     const startSh = this.buildStartSh(farmId, deviceId);
-    const indexTs = this.buildIndexTs(farmId, deviceId);
+    const indexTs = this.buildIndexTs(farmId, deviceId, thingName);
     const zipFilename = `farm_${farmId}_${deviceId}.zip`;
 
     const zip = new JSZip();
@@ -618,7 +618,11 @@ node aws-iot-device-sdk-js-v2/samples/node/mqtt/mqtt5_x509/dist/index.js --endpo
 `;
   }
 
-  private buildIndexTs(farmId: string, deviceId: string): string {
+  private buildIndexTs(
+    farmId: string,
+    deviceId: string,
+    thingName: string,
+  ): string {
     return `/**
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
@@ -632,6 +636,10 @@ import { v4 as uuidv4 } from "uuid";
 const TIMEOUT = 100000;
 const FARM_ID = "${farmId}";
 const DEVICE_ID = "${deviceId}";
+const THING_NAME = "${thingName}";
+
+const JOB_NOTIFY_TOPIC = "$aws/things/${thingName}/jobs/notify-next";
+const JOB_GET_ACCEPTED_TOPIC = "$aws/things/${thingName}/jobs/$next/get/accepted";
 
 // --------------------------------- ARGUMENT PARSING -----------------------------------------
 const args = yargs
@@ -689,6 +697,89 @@ interface SensorPayload {
   ts: number;
 }
 
+async function executeCommand(
+  commandType: string,
+  parameters: Record<string, unknown>,
+): Promise<void> {
+  console.log(\`==== Executing command: \${commandType} with params: \${JSON.stringify(parameters)} ====\\n\`);
+  switch (commandType) {
+    case "IRRIGATE": {
+      const durationMs = Math.min(
+        ((parameters.duration_minutes as number) ?? 1) * 60000,
+        10000,
+      );
+      await new Promise<void>((resolve) => setTimeout(resolve, durationMs));
+      break;
+    }
+    case "STOP_IRRIGATION":
+    case "ACTIVATE_SENSOR":
+    case "DEACTIVATE_SENSOR":
+      await new Promise<void>((resolve) => setTimeout(resolve, 500));
+      break;
+    case "CAPTURE_IMAGE":
+      await new Promise<void>((resolve) => setTimeout(resolve, 2000));
+      break;
+    default:
+      console.log(\`Unknown command type: \${commandType}\\n\`);
+  }
+  console.log(\`==== Command \${commandType} complete ====\\n\`);
+}
+
+async function handleJobExecution(
+  client: mqtt5.Mqtt5Client,
+  payloadStr: string,
+): Promise<void> {
+  let execution:
+    | {
+        jobId: string;
+        jobDocument: {
+          command_type: string;
+          parameters: Record<string, unknown>;
+        };
+      }
+    | undefined;
+  try {
+    const parsed = JSON.parse(payloadStr);
+    execution = parsed.execution;
+  } catch {
+    return;
+  }
+  if (!execution) return;
+
+  const { jobId, jobDocument } = execution;
+  console.log(\`==== Received job \${jobId}: \${jobDocument.command_type} ====\\n\`);
+
+  try {
+    await client.publish({
+      topicName: \`$aws/things/\${THING_NAME}/jobs/\${jobId}/update\`,
+      payload: JSON.stringify({ status: "IN_PROGRESS" }),
+      qos: mqtt5.QoS.AtLeastOnce,
+    });
+
+    await executeCommand(jobDocument.command_type, jobDocument.parameters ?? {});
+
+    await client.publish({
+      topicName: \`$aws/things/\${THING_NAME}/jobs/\${jobId}/update\`,
+      payload: JSON.stringify({
+        status: "SUCCEEDED",
+        statusDetails: { result: "ok" },
+      }),
+      qos: mqtt5.QoS.AtLeastOnce,
+    });
+    console.log(\`==== Job \${jobId} reported SUCCEEDED ====\\n\`);
+  } catch (err) {
+    await client.publish({
+      topicName: \`$aws/things/\${THING_NAME}/jobs/\${jobId}/update\`,
+      payload: JSON.stringify({
+        status: "FAILED",
+        statusDetails: { error: String(err) },
+      }),
+      qos: mqtt5.QoS.AtLeastOnce,
+    });
+    console.log(\`==== Job \${jobId} reported FAILED: \${err} ====\\n\`);
+  }
+}
+
 async function runSample() {
   console.log("\\nStarting MQTT5 X509 PubSub Sample\\n");
 
@@ -722,6 +813,14 @@ async function runSample() {
       console.log(
         \`==== Received message from topic '\${message.topicName}': \${payload} ====\\n\`,
       );
+
+      if (
+        message.topicName === JOB_NOTIFY_TOPIC ||
+        message.topicName === JOB_GET_ACCEPTED_TOPIC
+      ) {
+        await handleJobExecution(client, payload);
+        return;
+      }
 
       receivedCount++;
       if (receivedCount === args.count) {
@@ -786,6 +885,22 @@ async function runSample() {
   });
   console.log(\`Suback received with reason code: \${suback.reasonCodes}\\n\`);
 
+  console.log("==== Subscribing to IoT Jobs topics ====");
+  await client.subscribe({
+    subscriptions: [
+      { topicFilter: JOB_NOTIFY_TOPIC, qos: mqtt5.QoS.AtLeastOnce },
+      { topicFilter: JOB_GET_ACCEPTED_TOPIC, qos: mqtt5.QoS.AtLeastOnce },
+    ],
+  });
+  console.log("==== Subscribed to IoT Jobs topics ====\\n");
+
+  console.log("==== Requesting any pending jobs ====");
+  await client.publish({
+    topicName: "$aws/things/${thingName}/jobs/$next/get",
+    payload: JSON.stringify({}),
+    qos: mqtt5.QoS.AtLeastOnce,
+  });
+
   if (args.count === 0) {
     console.log("==== Sending messages until program killed ====\\n");
   } else {
@@ -839,6 +954,10 @@ async function runSample() {
     topicFilters: [args.topic],
   });
   console.log(\`Unsubscribed with \${unsuback.reasonCodes}\\n\`);
+
+  await client.unsubscribe({
+    topicFilters: [JOB_NOTIFY_TOPIC, JOB_GET_ACCEPTED_TOPIC],
+  });
 
   console.log("==== Stopping Client ====");
   const stopped = once(client, "stopped");
