@@ -368,6 +368,8 @@ export class FarmService {
               Resource: [
                 `arn:aws:iot:us-east-1:784608886729:topicfilter/farms/${farmId}/${deviceId}/telemetry`,
                 `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/*`,
+                `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/notify-next`,
+                `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/$next/get/accepted`,
               ],
             },
             {
@@ -543,6 +545,7 @@ export class FarmService {
             Resource: [
               `arn:aws:iot:us-east-1:784608886729:topicfilter/farms/${farmId}/${deviceId}/telemetry`,
               `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/*`,
+              `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/notify-next`,
             ],
           },
           {
@@ -1129,7 +1132,7 @@ runSample()
         .createTopicRule({
           ruleName,
           topicRulePayload: {
-            sql: "SELECT jobId AS tool_call_id, status, statusDetails AS response FROM '$aws/things/+/jobs/+/update/accepted'",
+            sql: "SELECT topic(5) AS tool_call_id, status, statusDetails AS response FROM '$aws/things/+/jobs/+/update'",
             actions: [
               {
                 http: {
