@@ -908,7 +908,8 @@ runSample()
         farm_id: farmId,
         device_id: deviceId,
       });
-      await iotClient
+      console.log('jobDocument:', jobDocument);
+      const response = await iotClient
         .createJob({
           jobId: saved.id,
           targets: [device.thing_arn],
@@ -916,6 +917,7 @@ runSample()
           targetSelection: 'SNAPSHOT',
         })
         .promise();
+      console.log('createJobResponse:', response);
     }
 
     return saved;
