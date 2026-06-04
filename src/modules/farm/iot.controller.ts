@@ -97,7 +97,7 @@ export class IotController {
     }
   }
 
-  @Get('iot/webhook/confirm')
+  @Get('iot/webhook')
   @HttpCode(200)
   async confirmIotDestination(
     @Query('confirmationToken') confirmationToken: string,

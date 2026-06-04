@@ -1041,7 +1041,7 @@ describe('FarmService', () => {
               expect.objectContaining({
                 http: expect.objectContaining({
                   url: 'https://api.example.com/api/iot/webhook',
-                  confirmationUrl: 'https://api.example.com/api/iot/webhook/confirm',
+                  confirmationUrl: 'https://api.example.com/api/iot/webhook',
                 }),
               }),
             ]),

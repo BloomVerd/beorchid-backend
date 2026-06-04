@@ -1002,7 +1002,7 @@ runSample()
 
     const ruleName = 'BeorchidIotJobUpdates';
     const webhookUrl = `${appBaseUrl}/api/iot/webhook`;
-    const confirmUrl = `${appBaseUrl}/api/iot/webhook/confirm`;
+    const confirmUrl = `${appBaseUrl}/api/iot/webhook`;
     const headers: AWS.Iot.HttpActionHeader[] = webhookSecret
       ? [{ key: 'x-iot-secret', value: webhookSecret }]
       : [];
