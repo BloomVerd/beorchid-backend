@@ -1,3 +1,5 @@
+jest.mock('archiver', () => jest.fn());
+
 import { Test, TestingModule } from '@nestjs/testing';
 import { ChatConsumer } from './chat.consumer';
 import { ChatService } from './chat.service';

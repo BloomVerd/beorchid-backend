@@ -997,6 +997,7 @@ runSample()
 
     const appBaseUrl = this.configService.get<string>('APP_BASE_URL');
     const webhookSecret = this.configService.get<string>('IOT_WEBHOOK_SECRET');
+    console.log('appBaseUrl:', appBaseUrl);
     if (!appBaseUrl) return;
 
     const ruleName = 'BeorchidIotJobUpdates';
