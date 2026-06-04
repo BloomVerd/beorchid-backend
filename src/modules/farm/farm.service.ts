@@ -359,6 +359,7 @@ export class FarmService {
               Resource: [
                 `arn:aws:iot:us-east-1:784608886729:topic/farms/${farmId}/${deviceId}/telemetry`,
                 `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/*/update`,
+                `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/$next/get`,
               ],
             },
             {
@@ -533,6 +534,7 @@ export class FarmService {
             Resource: [
               `arn:aws:iot:us-east-1:784608886729:topic/farms/${farmId}/${deviceId}/telemetry`,
               `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/*/update`,
+              `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/$next/get`,
             ],
           },
           {
