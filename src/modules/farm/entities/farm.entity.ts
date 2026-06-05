@@ -50,11 +50,20 @@ export enum SoilType {
   CHALK = 'CHALK',
 }
 
+export enum GrowthStage {
+  GERMINATION = 'germination',
+  VEGETATIVE = 'vegetative',
+  FLOWERING = 'flowering',
+  FRUITING = 'fruiting',
+  MATURATION = 'maturation',
+}
+
 registerEnumType(CropType, { name: 'CropType' });
 registerEnumType(SizeUnit, { name: 'SizeUnit' });
 registerEnumType(FarmType, { name: 'FarmType' });
 registerEnumType(SetupStatus, { name: 'SetupStatus' });
 registerEnumType(SoilType, { name: 'SoilType' });
+registerEnumType(GrowthStage, { name: 'GrowthStage' });
 
 @ObjectType()
 @Entity('farms')
@@ -106,6 +115,18 @@ export class Farm {
   @Field(() => Float, { nullable: true })
   @Column({ type: 'float', nullable: true })
   crop_density?: number;
+
+  @Field(() => GrowthStage, { nullable: true })
+  @Column({ type: 'enum', enum: GrowthStage, nullable: true })
+  growth_stage?: GrowthStage;
+
+  @Field(() => Float, { nullable: true })
+  @Column({ type: 'float', nullable: true })
+  elevation_m?: number;
+
+  @Field({ nullable: true })
+  @Column({ type: 'int', nullable: true })
+  days_to_maturity?: number;
 
   @Field(() => [String], { nullable: true })
   @Column({ type: 'simple-array', nullable: true })

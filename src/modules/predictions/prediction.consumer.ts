@@ -6,8 +6,15 @@ import { Between, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { Prediction, RiskLevel } from './entities/prediction.entity';
 import { PredictionRange } from './entities/prediction-range.entity';
-import { Farm } from '../farm/entities/farm.entity';
+import { CropType, Farm } from '../farm/entities/farm.entity';
 import { ImageData, PredictionType } from '../farm/entities/image-data.entity';
+
+const CROP_DAYS_TO_MATURITY: Record<CropType, number> = {
+  [CropType.MAIZE]: 120,
+  [CropType.RICE]: 130,
+  [CropType.CASSAVA]: 365,
+  [CropType.VEGETABLES]: 90,
+};
 
 interface PredictionApiSubplotInput {
   image_url: string;
@@ -19,13 +26,15 @@ interface PredictionApiSubplotInput {
 interface PredictionApiRequest {
   crop: string;
   soil_type: string;
-  growth_stage: string | null;
+  growth_stage: string;
   subplots: PredictionApiSubplotInput[];
   farm_metadata: {
     farm_size_ha: number;
     latitude: number | null;
     longitude: number | null;
     planting_density: number | null;
+    elevation_m: number;
+    days_to_maturity: number;
   };
 }
 
@@ -176,8 +185,8 @@ export class PredictionConsumer extends WorkerHost {
     const areaPerSubplot = farm.farm_size / images.length;
     return {
       crop: farm.crop_type.charAt(0) + farm.crop_type.slice(1).toLowerCase(),
-      soil_type: farm.soil_type?.toLowerCase() ?? 'unknown',
-      growth_stage: null,
+      soil_type: farm.soil_type?.toLowerCase() ?? 'loam',
+      growth_stage: farm.growth_stage ?? 'vegetative',
       subplots: images.map((img) => ({
         image_url: img.url,
         latitude: img.lat,
@@ -189,6 +198,8 @@ export class PredictionConsumer extends WorkerHost {
         latitude: farm.lat ?? null,
         longitude: farm.lon ?? null,
         planting_density: farm.crop_density ?? null,
+        elevation_m: farm.elevation_m ?? 0,
+        days_to_maturity: farm.days_to_maturity ?? CROP_DAYS_TO_MATURITY[farm.crop_type],
       },
     };
   }

@@ -21,7 +21,7 @@ export class HealthScheduler {
     private readonly healthProducer: HealthProducer,
   ) {}
 
-  @Cron('0 */15 * * * *')
+  @Cron(process.env.HEALTH_CRON_SCHEDULE ?? '0 */2 * * * *')
   async schedulePendingHealthComputes(): Promise<void> {
     const farms = await this.farmRepo.find({
       where: { farmer: { isActive: true } },
