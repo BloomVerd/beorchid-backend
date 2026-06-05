@@ -67,8 +67,12 @@ const makeSettings = (overrides: Partial<FarmerSettings> = {}): FarmerSettings =
     ...overrides,
   }) as FarmerSettings;
 
-const makeClaudeResponse = (json: object) => ({
-  content: [{ type: 'text', text: JSON.stringify(json) }],
+const makeLlmResponse = (json: object) => ({
+  choices: [{ message: { content: JSON.stringify(json) } }],
+});
+
+const makeLlmTextResponse = (text: string) => ({
+  choices: [{ message: { content: text } }],
 });
 
 describe('FarmDataConsumer', () => {
@@ -79,7 +83,7 @@ describe('FarmDataConsumer', () => {
   let yieldRepo: { find: jest.Mock };
   let farmDataService: { cacheResult: jest.Mock; clearPending: jest.Mock };
   let farmerSettingsService: { getOrCreate: jest.Mock };
-  let anthropicCreate: jest.Mock;
+  let llmCreate: jest.Mock;
   let dynamodbSend: jest.Mock;
 
   beforeEach(async () => {
@@ -110,9 +114,9 @@ describe('FarmDataConsumer', () => {
 
     consumer = module.get<FarmDataConsumer>(FarmDataConsumer);
 
-    anthropicCreate = jest.fn();
+    llmCreate = jest.fn();
     dynamodbSend = jest.fn().mockResolvedValue({ Items: [makeTelemetryItem()] });
-    (consumer as any).anthropic = { messages: { create: anthropicCreate } };
+    (consumer as any).llm = { chat: { completions: { create: llmCreate } } };
     (consumer as any).dynamodb = { send: dynamodbSend };
   });
 
@@ -123,7 +127,7 @@ describe('FarmDataConsumer', () => {
       await consumer.process(makeJob({ farmId: 'farm-1' }, 'other-job') as any);
 
       expect(farmRepo.findOne).not.toHaveBeenCalled();
-      expect(anthropicCreate).not.toHaveBeenCalled();
+      expect(llmCreate).not.toHaveBeenCalled();
     });
 
     it('runs the full happy path and caches all three sections', async () => {
@@ -132,7 +136,7 @@ describe('FarmDataConsumer', () => {
         irrigation: { recommendation: 'Irrigate 25mm within 12 hours', amount_mm: 25, urgency_hours: 12, next_rainfall: 'Tomorrow', badge_text: '25mm needed' },
         yield: { tons_per_ha: 4.2, change_percent: 7.7, trend: 'up', season: '2026 Long Rains' },
       };
-      anthropicCreate.mockResolvedValue(makeClaudeResponse(claudeJson));
+      llmCreate.mockResolvedValue(makeLlmResponse(claudeJson));
 
       await consumer.process(makeJob({ farmId: 'farm-1' }) as any);
 
@@ -153,8 +157,8 @@ describe('FarmDataConsumer', () => {
       farmerSettingsService.getOrCreate.mockResolvedValue(
         makeSettings({ farmDataCacheTtlSeconds: 7200 }),
       );
-      anthropicCreate.mockResolvedValue(
-        makeClaudeResponse({ yield: { tons_per_ha: 4.0, change_percent: 5.0, trend: 'up', season: '2026' } }),
+      llmCreate.mockResolvedValue(
+        makeLlmResponse({ yield: { tons_per_ha: 4.0, change_percent: 5.0, trend: 'up', season: '2026' } }),
       );
 
       await consumer.process(makeJob({ farmId: 'farm-1' }) as any);
@@ -170,7 +174,7 @@ describe('FarmDataConsumer', () => {
       farmerSettingsService.getOrCreate.mockResolvedValue(
         makeSettings({ farmDataLookbackSeconds: 120 }),
       );
-      anthropicCreate.mockResolvedValue(makeClaudeResponse({}));
+      llmCreate.mockResolvedValue(makeLlmResponse({}));
 
       await consumer.process(makeJob({ farmId: 'farm-1' }) as any);
 
@@ -182,8 +186,8 @@ describe('FarmDataConsumer', () => {
 
     it('omits sensor section when Claude does not return sensors key', async () => {
       dynamodbSend.mockResolvedValue({ Items: [] });
-      anthropicCreate.mockResolvedValue(
-        makeClaudeResponse({
+      llmCreate.mockResolvedValue(
+        makeLlmResponse({
           irrigation: { recommendation: 'Check irrigation', badge_text: 'OK' },
           yield: { tons_per_ha: 3.5, change_percent: -2.0, trend: 'down', season: '2026 Short Rains' },
         }),
@@ -199,8 +203,8 @@ describe('FarmDataConsumer', () => {
 
     it('only caches yield section when that is the only section returned', async () => {
       dynamodbSend.mockResolvedValue({ Items: [] });
-      anthropicCreate.mockResolvedValue(
-        makeClaudeResponse({
+      llmCreate.mockResolvedValue(
+        makeLlmResponse({
           yield: { tons_per_ha: 5.0, change_percent: 15.0, trend: 'up', season: '2026 Long Rains' },
         }),
       );
@@ -214,7 +218,7 @@ describe('FarmDataConsumer', () => {
     });
 
     it('clears pending flag and does not cache when Anthropic throws', async () => {
-      anthropicCreate.mockRejectedValue(new Error('API rate limit'));
+      llmCreate.mockRejectedValue(new Error('API rate limit'));
 
       await consumer.process(makeJob({ farmId: 'farm-1' }) as any);
 
@@ -231,10 +235,10 @@ describe('FarmDataConsumer', () => {
       expect(farmDataService.cacheResult).not.toHaveBeenCalled();
     });
 
-    it('clears pending flag when Claude returns invalid JSON', async () => {
-      anthropicCreate.mockResolvedValue({
-        content: [{ type: 'text', text: 'Sorry, I cannot process this request.' }],
-      });
+    it('clears pending flag when the LLM returns invalid JSON', async () => {
+      llmCreate.mockResolvedValue(
+        makeLlmTextResponse('Sorry, I cannot process this request.'),
+      );
 
       await consumer.process(makeJob({ farmId: 'farm-1' }) as any);
 
@@ -244,9 +248,9 @@ describe('FarmDataConsumer', () => {
 
     it('extracts JSON from markdown code fences', async () => {
       const json = { yield: { tons_per_ha: 4.0, change_percent: 5.0, trend: 'up', season: '2026 Long Rains' } };
-      anthropicCreate.mockResolvedValue({
-        content: [{ type: 'text', text: `\`\`\`json\n${JSON.stringify(json)}\n\`\`\`` }],
-      });
+      llmCreate.mockResolvedValue(
+        makeLlmTextResponse(`\`\`\`json\n${JSON.stringify(json)}\n\`\`\``),
+      );
 
       await consumer.process(makeJob({ farmId: 'farm-1' }) as any);
 
@@ -255,15 +259,15 @@ describe('FarmDataConsumer', () => {
       expect(cached.yield?.tons_per_ha).toBe(4.0);
     });
 
-    it('passes farm context to Claude including DynamoDB sensor readings', async () => {
-      anthropicCreate.mockResolvedValue(
-        makeClaudeResponse({ sensors: { readings: [], summary: 'OK' } }),
+    it('passes farm context to the LLM including DynamoDB sensor readings', async () => {
+      llmCreate.mockResolvedValue(
+        makeLlmResponse({ sensors: { readings: [], summary: 'OK' } }),
       );
 
       await consumer.process(makeJob({ farmId: 'farm-1' }) as any);
 
-      const callArgs = anthropicCreate.mock.calls[0][0];
-      const userMessage: string = callArgs.messages[0].content;
+      const callArgs = llmCreate.mock.calls[0][0];
+      const userMessage: string = callArgs.messages[1].content;
       expect(userMessage).toContain('Test Farm');
       expect(userMessage).toContain('MAIZE');
       expect(userMessage).toContain('soil_moisture=70.5%');

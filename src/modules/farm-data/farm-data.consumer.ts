@@ -3,9 +3,10 @@ import { Job } from 'bullmq';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { createDynamoDBClient } from 'src/common/config/dynamodb.config';
+import { createLlmClient, getLlmModel } from 'src/common/config/llm.config';
 import { Farm } from '../farm/entities/farm.entity';
 import { FarmHealth } from '../health/entities/farm-health.entity';
 import { IotDevice } from '../farm/entities/iot-device.entity';
@@ -58,7 +59,8 @@ interface FarmDataJson {
 
 @Processor('farm-data-queue')
 export class FarmDataConsumer extends WorkerHost {
-  private readonly anthropic: Anthropic;
+  private readonly llm: OpenAI;
+  private readonly model: string;
   private readonly dynamodb: DynamoDBDocumentClient;
 
   constructor(
@@ -74,9 +76,8 @@ export class FarmDataConsumer extends WorkerHost {
     private readonly yieldRepo: Repository<YieldComparison>,
   ) {
     super();
-    this.anthropic = new Anthropic({
-      apiKey: this.configService.get<string>('ANTHROPIC_API_KEY'),
-    });
+    this.llm = createLlmClient(this.configService);
+    this.model = getLlmModel(this.configService);
     this.dynamodb = createDynamoDBClient(this.configService);
   }
 
@@ -112,17 +113,16 @@ export class FarmDataConsumer extends WorkerHost {
 
       const context = this.buildContext(farm, health, iotDevices, telemetry, yieldComparisons);
 
-      const message = await this.anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
+      const completion = await this.llm.chat.completions.create({
+        model: this.model,
         max_tokens: 1024,
-        system: this.buildSystemPrompt(),
-        messages: [{ role: 'user', content: context }],
+        messages: [
+          { role: 'system', content: this.buildSystemPrompt() },
+          { role: 'user', content: context },
+        ],
       });
 
-      const rawText = message.content
-        .filter((b) => b.type === 'text')
-        .map((b) => (b as Anthropic.TextBlock).text)
-        .join('');
+      const rawText = completion.choices[0]?.message?.content ?? '';
 
       const json = this.extractJson(rawText);
       const parsed: FarmDataJson = JSON.parse(json);

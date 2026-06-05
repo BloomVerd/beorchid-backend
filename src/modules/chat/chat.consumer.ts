@@ -21,7 +21,7 @@ export class ChatConsumer extends WorkerHost {
 
     try {
       const messages = await this.chatService.buildMessageHistory(chatId);
-      const assembledBlocks = await this.claudeService.streamAndProcess(
+      const assistantText = await this.claudeService.streamAndProcess(
         chatId,
         farmId,
         messages,
@@ -29,7 +29,7 @@ export class ChatConsumer extends WorkerHost {
 
       const savedMsg = await this.chatService.saveAssistantMessage(
         chatId,
-        assembledBlocks,
+        assistantText,
       );
       await this.chatService.markChatDone(chatId);
 

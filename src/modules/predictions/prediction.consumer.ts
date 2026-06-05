@@ -4,26 +4,56 @@ import { Job } from 'bullmq';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
-import Anthropic from '@anthropic-ai/sdk';
 import { Prediction, RiskLevel } from './entities/prediction.entity';
 import { PredictionRange } from './entities/prediction-range.entity';
 import { Farm } from '../farm/entities/farm.entity';
 import { ImageData, PredictionType } from '../farm/entities/image-data.entity';
 
-interface PredictionJson {
-  predictions: Array<{
-    image_index: number;
-    assessments: Array<{
-      prediction_type: string;
-      risk_level: string;
-    }>;
-  }>;
+interface PredictionApiSubplotInput {
+  image_url: string;
+  latitude: number;
+  longitude: number;
+  area_ha: number;
+}
+
+interface PredictionApiRequest {
+  crop: string;
+  soil_type: string;
+  growth_stage: string | null;
+  subplots: PredictionApiSubplotInput[];
+  farm_metadata: {
+    farm_size_ha: number;
+    latitude: number | null;
+    longitude: number | null;
+    planting_density: number | null;
+  };
+}
+
+interface DiseaseResult {
+  predicted_class: string;
+  severity: number;
+  confidence: number;
+}
+
+interface YieldResult {
+  water_stress_pct: number;
+}
+
+interface SubplotResult {
+  latitude: number;
+  longitude: number;
+  disease?: DiseaseResult;
+  yield?: YieldResult;
+}
+
+interface PredictionApiResponse {
+  subplots: SubplotResult[];
 }
 
 @Processor('prediction-queue')
 export class PredictionConsumer extends WorkerHost {
   private readonly logger = new Logger(PredictionConsumer.name);
-  private readonly anthropic: Anthropic;
+  private readonly predictionBaseUrl: string;
 
   constructor(
     private readonly configService: ConfigService,
@@ -31,9 +61,10 @@ export class PredictionConsumer extends WorkerHost {
     private readonly predictionRepo: Repository<Prediction>,
   ) {
     super();
-    this.anthropic = new Anthropic({
-      apiKey: this.configService.get<string>('ANTHROPIC_API_KEY'),
-    });
+    this.predictionBaseUrl = this.configService.get<string>(
+      'PREDICTION_BASE_URL',
+      'http://localhost:8000',
+    );
   }
 
   async process(job: Job): Promise<void> {
@@ -90,50 +121,47 @@ export class PredictionConsumer extends WorkerHost {
       createdAt: Between(weekStart, weekEnd) as any,
     });
 
-    const userContent: Anthropic.ContentBlockParam[] = [
-      { type: 'text', text: this.buildContext(farm, usable) },
-    ];
-
-    usable.forEach((img, idx) => {
-      userContent.push({
-        type: 'text',
-        text: `Image ${idx} (lat=${img.lat}, lon=${img.lon}, requested_types=${img.prediction_types.join(',')})`,
-      });
-      userContent.push({
-        type: 'image',
-        source: { type: 'url', url: img.url },
-      });
-    });
-
-    const response = await this.anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
-      system: this.buildSystemPrompt(),
-      messages: [{ role: 'user', content: userContent }],
-    });
-
-    const rawText = response.content
-      .filter((b) => b.type === 'text')
-      .map((b) => (b as Anthropic.TextBlock).text)
-      .join('');
-
-    const parsed: PredictionJson = JSON.parse(this.extractJson(rawText));
+    const payload = this.buildApiRequest(farm, usable);
+    const apiResponse = await this.callPredictionApi(payload);
 
     const records: Prediction[] = [];
-    for (const entry of parsed.predictions) {
-      const img = usable[entry.image_index];
-      if (!img) continue;
-      for (const assessment of entry.assessments) {
-        const predType = assessment.prediction_type as PredictionType;
-        if (!img.prediction_types.includes(predType)) continue;
+    for (let i = 0; i < usable.length; i++) {
+      const img = usable[i];
+      const subplot = apiResponse.subplots[i];
+      if (!subplot) {
+        this.logger.warn(`No subplot result at index ${i} for farm ${farmId}`);
+        continue;
+      }
+
+      for (const predType of img.prediction_types) {
+        let riskLevel: RiskLevel | undefined;
+
+        if (predType === PredictionType.DISEASE_PREDICTION) {
+          if (!subplot.disease) {
+            this.logger.warn(
+              `Missing disease data for subplot ${i}, image ${img.id}`,
+            );
+            continue;
+          }
+          riskLevel = this.deriveDiseasRiskLevel(subplot.disease);
+        } else if (predType === PredictionType.YIELD_PREDICTION) {
+          if (!subplot.yield) {
+            this.logger.warn(
+              `Missing yield data for subplot ${i}, image ${img.id}`,
+            );
+            continue;
+          }
+          riskLevel = this.deriveYieldRiskLevel(subplot.yield);
+        }
+
         records.push(
           this.predictionRepo.create({
             farm: { id: farmId } as Farm,
             image: { id: img.id } as ImageData,
-            lat: img.lat,
-            lon: img.lon,
+            lat: subplot.latitude,
+            lon: subplot.longitude,
             prediction_type: predType,
-            risk_level: (assessment.risk_level as RiskLevel) ?? undefined,
+            risk_level: riskLevel,
           }),
         );
       }
@@ -144,47 +172,53 @@ export class PredictionConsumer extends WorkerHost {
     }
   }
 
-  private buildContext(farm: Farm, images: ImageData[]): string {
-    return [
-      `FARM: ${farm.name} | Crop: ${farm.crop_type}${farm.variety ? ` (${farm.variety})` : ''} | Soil: ${farm.soil_type} | Type: ${farm.farm_type}`,
-      `IMAGES: ${images.length} field image(s) to analyse`,
-    ].join('\n');
+  private buildApiRequest(farm: Farm, images: ImageData[]): PredictionApiRequest {
+    const areaPerSubplot = farm.farm_size / images.length;
+    return {
+      crop: farm.crop_type.charAt(0) + farm.crop_type.slice(1).toLowerCase(),
+      soil_type: farm.soil_type?.toLowerCase() ?? 'unknown',
+      growth_stage: null,
+      subplots: images.map((img) => ({
+        image_url: img.url,
+        latitude: img.lat,
+        longitude: img.lon,
+        area_ha: areaPerSubplot,
+      })),
+      farm_metadata: {
+        farm_size_ha: farm.farm_size,
+        latitude: farm.lat ?? null,
+        longitude: farm.lon ?? null,
+        planting_density: farm.crop_density ?? null,
+      },
+    };
   }
 
-  private buildSystemPrompt(): string {
-    return `You are an agricultural AI analyst. You will receive farm metadata and a series of field photographs. For each image, assess the requested prediction types and assign a risk level.
+  private async callPredictionApi(
+    payload: PredictionApiRequest,
+  ): Promise<PredictionApiResponse> {
+    const url = `${this.predictionBaseUrl}/predict?verbose=true`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
 
-Return ONLY valid JSON — no markdown, no explanation, no code fences. Use this exact shape:
-{
-  "predictions": [
-    {
-      "image_index": <integer matching the Image N index>,
-      "assessments": [
-        {
-          "prediction_type": "DISEASE_PREDICTION" | "YIELD_PREDICTION",
-          "risk_level": "low" | "moderate" | "high"
-        }
-      ]
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`Prediction API returned ${response.status}: ${body}`);
     }
-  ]
-}
 
-Rules:
-- Include one assessments entry for every requested_type listed on that image
-- DISEASE_PREDICTION: assess visible disease indicators (lesions, discoloration, blight, wilting)
-- YIELD_PREDICTION: assess yield potential (crop density, growth stage, stress signs, canopy health)
-- risk_level must be exactly one of: "low", "moderate", "high"
-- Only include images you received; do not fabricate image_index values`;
+    return response.json() as Promise<PredictionApiResponse>;
   }
 
-  private extractJson(text: string): string {
-    const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (fenceMatch) return fenceMatch[1].trim();
-    const braceStart = text.indexOf('{');
-    const braceEnd = text.lastIndexOf('}');
-    if (braceStart !== -1 && braceEnd !== -1) {
-      return text.slice(braceStart, braceEnd + 1);
-    }
-    return text.trim();
+  private deriveDiseasRiskLevel(disease: DiseaseResult): RiskLevel {
+    if (disease.predicted_class === 'healthy') return RiskLevel.LOW;
+    return disease.severity >= 0.5 ? RiskLevel.HIGH : RiskLevel.MODERATE;
+  }
+
+  private deriveYieldRiskLevel(yieldData: YieldResult): RiskLevel {
+    if (yieldData.water_stress_pct < 0.3) return RiskLevel.LOW;
+    if (yieldData.water_stress_pct < 0.6) return RiskLevel.MODERATE;
+    return RiskLevel.HIGH;
   }
 }

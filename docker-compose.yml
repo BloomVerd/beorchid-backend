@@ -50,6 +50,54 @@ services:
     networks:
       - beorchid-network
 
+  ollama:
+    image: ollama/ollama:${OLLAMA_VERSION:-latest}
+    container_name: ollama
+    restart: unless-stopped
+    # Ollama is NOT published to the host directly — only nginx can reach it
+    # over the internal network. Clients go through the API-key gateway.
+    expose:
+      - '11434'
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-24h}
+      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-1}
+    volumes:
+      - ollama-models:/root/.ollama
+    networks:
+      - beorchid-network
+    healthcheck:
+      test: ['CMD-SHELL', 'ollama list >/dev/null 2>&1 || exit 1']
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    # GPU support: uncomment on a GPU-backed EC2 instance (g4dn/g5) with the
+    # NVIDIA Container Toolkit installed. Harmless to leave commented on CPU.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  model-init:
+    image: ollama/ollama:${OLLAMA_VERSION:-latest}
+    container_name: ollama-model-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:?OLLAMA_MODEL is required}
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - 'ollama pull "$${OLLAMA_MODEL}"'
+    networks:
+      - beorchid-network
+    restart: 'no'
+
 volumes:
   postgres-data:
     driver: local
@@ -64,6 +112,13 @@ volumes:
       type: none
       o: bind
       device: /mnt/redis-data
+
+  ollama-models:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /mnt/ollama-models
 
 networks:
   beorchid-network:

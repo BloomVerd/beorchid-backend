@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { Chat } from './entities/chat.entity';
 import { ChatMessage, MessageRole } from './entities/chat-message.entity';
 import { Farm } from '../farm/entities/farm.entity';
@@ -59,7 +59,9 @@ export class ChatService {
     });
   }
 
-  async buildMessageHistory(chatId: string): Promise<Anthropic.MessageParam[]> {
+  async buildMessageHistory(
+    chatId: string,
+  ): Promise<OpenAI.Chat.Completions.ChatCompletionMessageParam[]> {
     const messages = await this.messageRepo.find({
       where: { chat: { id: chatId }, is_complete: true },
       order: { createdAt: 'ASC' },
@@ -67,25 +69,20 @@ export class ChatService {
 
     return messages.map((m) => ({
       role: m.role as 'user' | 'assistant',
-      content: (m.raw_blocks ?? m.content ?? '') as any,
+      content: m.content ?? '',
     }));
   }
 
   async saveAssistantMessage(
     chatId: string,
-    blocks: Anthropic.ContentBlock[],
+    content: string,
   ): Promise<ChatMessage> {
-    const textContent = blocks
-      .filter((b) => b.type === 'text')
-      .map((b) => (b as Anthropic.TextBlock).text)
-      .join('');
-
     return this.messageRepo.save(
       this.messageRepo.create({
         chat: { id: chatId } as Chat,
         role: MessageRole.ASSISTANT,
-        content: textContent,
-        raw_blocks: blocks as any[],
+        content,
+        raw_blocks: [{ type: 'text', text: content }] as any[],
         is_complete: true,
       }),
     );

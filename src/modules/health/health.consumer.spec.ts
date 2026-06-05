@@ -41,47 +41,49 @@ const makeTelemetryItem = () => ({
   temperature: 29.3,
 });
 
-const makeClaudeHealthResponse = (overrides: object = {}) => ({
-  stop_reason: 'end_turn',
-  content: [
+const makeLlmHealthResponse = (overrides: object = {}) => ({
+  choices: [
     {
-      type: 'text',
-      text: JSON.stringify({
-        overall_score: 78,
-        soil_health: 72,
-        crop_health: 80,
-        weather_stress: 25,
-        disease_risk: 15,
-        crop_field_health: [
-          {
-            field_name: 'Field A',
-            crop_type: 'MAIZE',
-            health_percent: 80,
-            ndvi: 0.72,
-            disease_probability: 0.1,
-            disease_type: null,
-            growth_stage: 'VEGETATIVE',
-            expected_harvest: 'August 2026',
-          },
-        ],
-        disease_alerts: [],
-        health_alerts: [
-          {
-            severity: 'INFO',
-            title: 'Soil moisture optimal',
-            description: 'Moisture levels are within range.',
-            action: 'No action needed.',
-            estimated_impact: 'None',
-          },
-        ],
-        sensor_history: [
-          { date: '2026-06-03', moisture: 70.5, temperature: 29.3, nitrogen: 1.2, phosphorus: 0.8, potassium: 1.5 },
-        ],
-        yield_comparisons: [
-          { field_name: 'Field A', current_yield: 4.2, last_season_yield: 3.9, confidence_min: 3.8, confidence_max: 4.6, revenue: 1260 },
-        ],
-        ...overrides,
-      }),
+      finish_reason: 'stop',
+      message: {
+        role: 'assistant',
+        content: JSON.stringify({
+          overall_score: 78,
+          soil_health: 72,
+          crop_health: 80,
+          weather_stress: 25,
+          disease_risk: 15,
+          crop_field_health: [
+            {
+              field_name: 'Field A',
+              crop_type: 'MAIZE',
+              health_percent: 80,
+              ndvi: 0.72,
+              disease_probability: 0.1,
+              disease_type: null,
+              growth_stage: 'VEGETATIVE',
+              expected_harvest: 'August 2026',
+            },
+          ],
+          disease_alerts: [],
+          health_alerts: [
+            {
+              severity: 'INFO',
+              title: 'Soil moisture optimal',
+              description: 'Moisture levels are within range.',
+              action: 'No action needed.',
+              estimated_impact: 'None',
+            },
+          ],
+          sensor_history: [
+            { date: '2026-06-03', moisture: 70.5, temperature: 29.3, nitrogen: 1.2, phosphorus: 0.8, potassium: 1.5 },
+          ],
+          yield_comparisons: [
+            { field_name: 'Field A', current_yield: 4.2, last_season_yield: 3.9, confidence_min: 3.8, confidence_max: 4.6, revenue: 1260 },
+          ],
+          ...overrides,
+        }),
+      },
     },
   ],
 });
@@ -99,7 +101,7 @@ describe('HealthConsumer', () => {
   let predictionRepo: { find: jest.Mock };
   let farmerSettingsService: { getOrCreate: jest.Mock };
   let farmService: { triggerIotDevice: jest.Mock };
-  let anthropicCreate: jest.Mock;
+  let llmCreate: jest.Mock;
   let dynamodbSend: jest.Mock;
 
   beforeEach(async () => {
@@ -161,9 +163,9 @@ describe('HealthConsumer', () => {
 
     consumer = module.get<HealthConsumer>(HealthConsumer);
 
-    anthropicCreate = jest.fn().mockResolvedValue(makeClaudeHealthResponse());
+    llmCreate = jest.fn().mockResolvedValue(makeLlmHealthResponse());
     dynamodbSend = jest.fn().mockResolvedValue({ Items: [makeTelemetryItem()] });
-    (consumer as any).anthropic = { messages: { create: anthropicCreate } };
+    (consumer as any).llm = { chat: { completions: { create: llmCreate } } };
     (consumer as any).dynamodb = { send: dynamodbSend };
   });
 
@@ -174,7 +176,7 @@ describe('HealthConsumer', () => {
       await consumer.process(makeJob({ farmIds: ['farm-1'] }, 'other-job') as any);
 
       expect(farmRepo.findOne).not.toHaveBeenCalled();
-      expect(anthropicCreate).not.toHaveBeenCalled();
+      expect(llmCreate).not.toHaveBeenCalled();
     });
 
     it('happy path: saves FarmHealth and all nested entities', async () => {
@@ -197,8 +199,8 @@ describe('HealthConsumer', () => {
     });
 
     it('skips nested saves when Claude returns empty arrays', async () => {
-      anthropicCreate.mockResolvedValue(
-        makeClaudeHealthResponse({
+      llmCreate.mockResolvedValue(
+        makeLlmHealthResponse({
           crop_field_health: [],
           disease_alerts: [],
           health_alerts: [],
@@ -221,9 +223,9 @@ describe('HealthConsumer', () => {
       farmRepo.findOne
         .mockResolvedValueOnce(null)
         .mockResolvedValue(makeFarm());
-      anthropicCreate
+      llmCreate
         .mockRejectedValueOnce(new Error('API error'))
-        .mockResolvedValue(makeClaudeHealthResponse());
+        .mockResolvedValue(makeLlmHealthResponse());
 
       await expect(
         consumer.process(makeJob({ farmIds: ['farm-bad', 'farm-good'] }) as any),
@@ -233,8 +235,8 @@ describe('HealthConsumer', () => {
     it('includes DynamoDB telemetry in the Claude prompt context', async () => {
       await consumer.process(makeJob({ farmIds: ['farm-1'] }) as any);
 
-      const callArgs = anthropicCreate.mock.calls[0][0];
-      const userMessage: string = callArgs.messages[0].content;
+      const callArgs = llmCreate.mock.calls[0][0];
+      const userMessage: string = callArgs.messages[1].content;
       expect(userMessage).toContain('soil_moisture=70.5%');
       expect(userMessage).toContain('humidity=69%');
     });
@@ -262,19 +264,33 @@ describe('HealthConsumer', () => {
 
     it('executes IoT tool calls and feeds results back before producing final JSON', async () => {
       const toolUseResponse = {
-        stop_reason: 'tool_use',
-        content: [
+        choices: [
           {
-            type: 'tool_use',
-            id: 'tu-1',
-            name: 'trigger_iot_device',
-            input: { device_id: 'device-uuid-1', command_type: 'IRRIGATE', parameters: { duration_minutes: 30 } },
+            finish_reason: 'tool_calls',
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'tu-1',
+                  type: 'function',
+                  function: {
+                    name: 'trigger_iot_device',
+                    arguments: JSON.stringify({
+                      device_id: 'device-uuid-1',
+                      command_type: 'IRRIGATE',
+                      parameters: { duration_minutes: 30 },
+                    }),
+                  },
+                },
+              ],
+            },
           },
         ],
       };
-      anthropicCreate
+      llmCreate
         .mockResolvedValueOnce(toolUseResponse)
-        .mockResolvedValue(makeClaudeHealthResponse());
+        .mockResolvedValue(makeLlmHealthResponse());
 
       await consumer.process(makeJob({ farmIds: ['farm-1'] }) as any);
 
@@ -284,14 +300,14 @@ describe('HealthConsumer', () => {
         'device-uuid-1',
         { command_type: 'IRRIGATE', parameters: { duration_minutes: 30 } },
       );
-      expect(anthropicCreate).toHaveBeenCalledTimes(2);
-      const secondCall = anthropicCreate.mock.calls[1][0];
+      expect(llmCreate).toHaveBeenCalledTimes(2);
+      const secondCall = llmCreate.mock.calls[1][0];
       const toolResultMsg = secondCall.messages.find(
-        (m: any) => m.role === 'user' && Array.isArray(m.content),
+        (m: any) => m.role === 'tool' && m.tool_call_id === 'tu-1',
       );
-      expect(toolResultMsg.content[0]).toMatchObject({
-        type: 'tool_result',
-        tool_use_id: 'tu-1',
+      expect(toolResultMsg).toMatchObject({
+        role: 'tool',
+        tool_call_id: 'tu-1',
         content: expect.stringContaining('tool-call-1'),
       });
       expect(farmHealthRepo.save).toHaveBeenCalled();

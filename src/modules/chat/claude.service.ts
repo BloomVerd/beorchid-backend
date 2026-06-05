@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { Farm } from '../farm/entities/farm.entity';
 import { FarmHealth } from '../health/entities/farm-health.entity';
 import { IotDevice } from '../farm/entities/iot-device.entity';
@@ -10,12 +10,15 @@ import { IotCommandType } from '../farm/entities/iot-tool-call.entity';
 import { Prediction } from '../predictions/entities/prediction.entity';
 import { FarmService } from '../farm/farm.service';
 import { ChatPubSubService } from './chat-pubsub.service';
-import { CLAUDE_TOOLS } from './claude.tools';
+import { LLM_TOOLS } from './claude.tools';
+import { createLlmClient, getLlmModel } from 'src/common/config/llm.config';
+
+type ChatMessageParam = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 
 @Injectable()
 export class ClaudeService {
-  private readonly anthropic: Anthropic;
-  private readonly MODEL = 'claude-sonnet-4-6';
+  private readonly llm: OpenAI;
+  private readonly model: string;
 
   constructor(
     private readonly configService: ConfigService,
@@ -30,111 +33,144 @@ export class ClaudeService {
     @InjectRepository(Prediction)
     private readonly predictionRepo: Repository<Prediction>,
   ) {
-    this.anthropic = new Anthropic({
-      apiKey: this.configService.get<string>('ANTHROPIC_API_KEY'),
-    });
+    this.llm = createLlmClient(this.configService);
+    this.model = getLlmModel(this.configService);
   }
 
   async streamAndProcess(
     chatId: string,
     farmId: string,
-    messages: Anthropic.MessageParam[],
-  ): Promise<Anthropic.ContentBlock[]> {
-    let currentMessages = [...messages];
+    messages: ChatMessageParam[],
+  ): Promise<string> {
+    const currentMessages: ChatMessageParam[] = [
+      { role: 'system', content: this.buildSystemPrompt(farmId) },
+      ...messages,
+    ];
+
+    let assistantText = '';
 
     while (true) {
-      const toolUseBlocks: Anthropic.ToolUseBlock[] = [];
-
-      const stream = this.anthropic.messages.stream({
-        model: this.MODEL,
+      const stream = await this.llm.chat.completions.create({
+        model: this.model,
         max_tokens: 4096,
-        system: this.buildSystemPrompt(farmId),
         messages: currentMessages,
-        tools: CLAUDE_TOOLS,
+        tools: LLM_TOOLS,
+        stream: true,
       });
 
-      for await (const event of stream) {
-        if (
-          event.type === 'content_block_start' &&
-          event.content_block.type === 'tool_use'
-        ) {
-          await this.pubSub.publish(chatId, {
-            type: 'tool_use',
-            chatId,
-            toolName: event.content_block.name,
-          });
-        }
+      assistantText = '';
+      const toolCalls: Record<
+        number,
+        { id: string; name: string; arguments: string }
+      > = {};
+      let finishReason: string | null = null;
 
-        if (
-          event.type === 'content_block_delta' &&
-          event.delta.type === 'text_delta'
-        ) {
+      for await (const chunk of stream) {
+        const choice = chunk.choices[0];
+        if (!choice) continue;
+
+        const delta = choice.delta;
+
+        if (delta?.content) {
+          assistantText += delta.content;
           await this.pubSub.publish(chatId, {
             type: 'token',
             chatId,
-            delta: event.delta.text,
+            delta: delta.content,
           });
         }
-      }
 
-      const finalMsg = await stream.finalMessage();
-
-      for (const block of finalMsg.content) {
-        if (block.type === 'tool_use') {
-          toolUseBlocks.push(block as Anthropic.ToolUseBlock);
+        if (delta?.tool_calls) {
+          for (const tc of delta.tool_calls) {
+            const idx = tc.index;
+            if (!toolCalls[idx]) {
+              toolCalls[idx] = { id: '', name: '', arguments: '' };
+            }
+            if (tc.id) toolCalls[idx].id = tc.id;
+            if (tc.function?.name) {
+              toolCalls[idx].name = tc.function.name;
+              await this.pubSub.publish(chatId, {
+                type: 'tool_use',
+                chatId,
+                toolName: tc.function.name,
+              });
+            }
+            if (tc.function?.arguments) {
+              toolCalls[idx].arguments += tc.function.arguments;
+            }
+          }
         }
+
+        if (choice.finish_reason) finishReason = choice.finish_reason;
       }
 
-      if (finalMsg.stop_reason === 'end_turn' || toolUseBlocks.length === 0) {
-        return finalMsg.content;
+      const collectedToolCalls = Object.values(toolCalls);
+
+      if (finishReason !== 'tool_calls' || collectedToolCalls.length === 0) {
+        return assistantText;
       }
-
-      currentMessages.push({ role: 'assistant', content: finalMsg.content });
-
-      const toolResults = await Promise.all(
-        toolUseBlocks.map((tu) => this.executeTool(tu, farmId)),
-      );
 
       currentMessages.push({
-        role: 'user',
-        content: toolResults.map((result, i) => ({
-          type: 'tool_result' as const,
-          tool_use_id: toolUseBlocks[i].id,
-          content: JSON.stringify(result),
+        role: 'assistant',
+        content: assistantText || null,
+        tool_calls: collectedToolCalls.map((tc) => ({
+          id: tc.id,
+          type: 'function' as const,
+          function: { name: tc.name, arguments: tc.arguments },
         })),
       });
+
+      const toolResults = await Promise.all(
+        collectedToolCalls.map(async (tc) => {
+          let input: Record<string, unknown> = {};
+          try {
+            input = tc.arguments ? JSON.parse(tc.arguments) : {};
+          } catch {
+            input = {};
+          }
+          const result = await this.executeTool(tc.name, input, farmId);
+          return {
+            role: 'tool' as const,
+            tool_call_id: tc.id,
+            content: JSON.stringify(result),
+          };
+        }),
+      );
+
+      currentMessages.push(...toolResults);
     }
   }
 
   private async executeTool(
-    toolUse: Anthropic.ToolUseBlock,
+    name: string,
+    input: Record<string, unknown>,
     farmId: string,
   ): Promise<unknown> {
-    switch (toolUse.name) {
+    switch (name) {
       case 'get_farm_health':
         return this.toolGetFarmHealth(farmId);
       case 'get_predictions':
         return this.toolGetPredictions(
           farmId,
-          (toolUse.input as { limit?: number }).limit,
+          (input as { limit?: number }).limit,
         );
       case 'get_iot_devices':
         return this.toolGetIotDevices(farmId);
       case 'get_farm_details':
         return this.toolGetFarmDetails(farmId);
       case 'trigger_iot_device': {
-        const input = toolUse.input as {
+        const args = input as {
           device_id: string;
           command_type: string;
           parameters?: Record<string, unknown>;
         };
-        return this.farmService.triggerIotDevice(null, farmId, input.device_id, {
-          command_type: input.command_type as IotCommandType,
-          parameters: input.parameters,
+        return this.farmService.triggerIotDevice(null, farmId, args.device_id, {
+          command_type: args.command_type as IotCommandType,
+          parameters: args.parameters,
         });
       }
       default:
-        return { error: `Unknown tool: ${toolUse.name}` };
+        return { error: `Unknown tool: ${name}` };
     }
   }
 

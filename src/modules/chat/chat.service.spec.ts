@@ -163,7 +163,7 @@ describe('ChatService', () => {
   });
 
   describe('buildMessageHistory', () => {
-    it('returns messages ordered by createdAt ASC mapped to Anthropic format', async () => {
+    it('returns messages ordered by createdAt ASC mapped to OpenAI format', async () => {
       const messages = [
         makeMessage({ role: MessageRole.USER, content: 'Hello', createdAt: new Date('2024-01-01T10:00:00Z') }),
         makeMessage({ id: 'msg-2', role: MessageRole.ASSISTANT, content: 'Hi there', raw_blocks: [{ type: 'text', text: 'Hi there' }], createdAt: new Date('2024-01-01T10:01:00Z') }),
@@ -183,57 +183,39 @@ describe('ChatService', () => {
       );
     });
 
-    it('uses raw_blocks when available for Anthropic API replay', async () => {
-      const blocks = [
-        { type: 'text', text: 'answer' },
-        { type: 'tool_use', id: 'tu_1', name: 'get_farm_health', input: {} },
-      ];
+    it('maps the stored content string to the OpenAI message content', async () => {
       const msg = makeMessage({
         role: MessageRole.ASSISTANT,
         content: 'answer',
-        raw_blocks: blocks,
+        raw_blocks: [{ type: 'text', text: 'answer' }],
       });
       messageRepo.find.mockResolvedValue([msg]);
 
       const result = await service.buildMessageHistory('chat-id-1');
 
-      expect(result[0].content).toEqual(blocks);
+      expect(result[0].content).toBe('answer');
     });
 
-    it('falls back to content string when raw_blocks is null', async () => {
-      const msg = makeMessage({ raw_blocks: null, content: 'plain text' });
+    it('falls back to empty string when content is null', async () => {
+      const msg = makeMessage({ raw_blocks: null, content: null as any });
       messageRepo.find.mockResolvedValue([msg]);
 
       const result = await service.buildMessageHistory('chat-id-1');
 
-      expect(result[0].content).toBe('plain text');
+      expect(result[0].content).toBe('');
     });
   });
 
   describe('saveAssistantMessage', () => {
-    it('extracts plain text from ContentBlock[] and saves', async () => {
-      const blocks = [
-        { type: 'text', text: 'The soil is healthy. ' },
-        { type: 'text', text: 'No issues detected.' },
-      ];
+    it('saves the assistant text as content and a text raw_block', async () => {
+      const text = 'The soil is healthy. No issues detected.';
 
-      const saved = await service.saveAssistantMessage('chat-id-1', blocks as any);
+      const saved = await service.saveAssistantMessage('chat-id-1', text);
 
-      expect(saved.content).toBe('The soil is healthy. No issues detected.');
-      expect(saved.raw_blocks).toEqual(blocks);
+      expect(saved.content).toBe(text);
+      expect(saved.raw_blocks).toEqual([{ type: 'text', text }]);
       expect(saved.role).toBe(MessageRole.ASSISTANT);
       expect(saved.is_complete).toBe(true);
-    });
-
-    it('ignores tool_use blocks when extracting plain text', async () => {
-      const blocks = [
-        { type: 'tool_use', id: 'tu_1', name: 'get_farm_health', input: {} },
-        { type: 'text', text: 'Based on the data, your farm is healthy.' },
-      ];
-
-      const saved = await service.saveAssistantMessage('chat-id-1', blocks as any);
-
-      expect(saved.content).toBe('Based on the data, your farm is healthy.');
     });
   });
 

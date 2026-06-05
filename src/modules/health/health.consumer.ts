@@ -4,9 +4,10 @@ import { Job } from 'bullmq';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { createDynamoDBClient } from 'src/common/config/dynamodb.config';
+import { createLlmClient, getLlmModel } from 'src/common/config/llm.config';
 import { Farm } from '../farm/entities/farm.entity';
 import { IotDevice } from '../farm/entities/iot-device.entity';
 import { FarmHealth } from './entities/farm-health.entity';
@@ -88,7 +89,8 @@ interface TelemetryItem {
 @Processor('health-queue')
 export class HealthConsumer extends WorkerHost {
   private readonly logger = new Logger(HealthConsumer.name);
-  private readonly anthropic: Anthropic;
+  private readonly llm: OpenAI;
+  private readonly model: string;
   private readonly dynamodb: DynamoDBDocumentClient;
 
   constructor(
@@ -114,9 +116,8 @@ export class HealthConsumer extends WorkerHost {
     private readonly farmService: FarmService,
   ) {
     super();
-    this.anthropic = new Anthropic({
-      apiKey: this.configService.get<string>('ANTHROPIC_API_KEY'),
-    });
+    this.llm = createLlmClient(this.configService);
+    this.model = getLlmModel(this.configService);
     this.dynamodb = createDynamoDBClient(this.configService);
   }
 
@@ -185,44 +186,48 @@ export class HealthConsumer extends WorkerHost {
       sensorHistory,
     );
 
-    const messages: Anthropic.MessageParam[] = [
+    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+      { role: 'system', content: this.buildSystemPrompt() },
       { role: 'user', content: context },
     ];
     let rawText = '';
 
     for (let round = 0; round < 5; round++) {
-      const response = await this.anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
+      const response = await this.llm.chat.completions.create({
+        model: this.model,
         max_tokens: 2048,
-        system: this.buildSystemPrompt(),
         tools: [this.buildIotDeviceTool()],
         messages,
       });
 
-      const textBlocks = response.content.filter((b) => b.type === 'text');
-      if (textBlocks.length) {
-        rawText = textBlocks
-          .map((b) => (b as Anthropic.TextBlock).text)
-          .join('');
-      }
+      const choice = response.choices[0];
+      const message = choice?.message;
+      if (message?.content) rawText = message.content;
 
-      if (response.stop_reason !== 'tool_use') break;
+      const toolCalls = (message?.tool_calls ?? []).filter(
+        (tc) => tc.type === 'function',
+      );
 
-      messages.push({ role: 'assistant', content: response.content });
+      if (choice?.finish_reason !== 'tool_calls' || !toolCalls.length) break;
 
-      const toolResults: Anthropic.ToolResultBlockParam[] = await Promise.all(
-        response.content
-          .filter((b) => b.type === 'tool_use')
-          .map(async (block) => {
-            const toolUse = block as Anthropic.ToolUseBlock;
-            const input = toolUse.input as {
+      messages.push(message);
+
+      const toolResults: OpenAI.Chat.Completions.ChatCompletionToolMessageParam[] =
+        await Promise.all(
+          toolCalls.map(async (toolCall) => {
+            let input: {
               device_id: string;
               command_type: string;
               parameters?: Record<string, unknown>;
             };
+            try {
+              input = JSON.parse(toolCall.function.arguments || '{}');
+            } catch {
+              input = { device_id: '', command_type: '' };
+            }
             let content: string;
             try {
-              const toolCall = await this.farmService.triggerIotDevice(
+              const dispatched = await this.farmService.triggerIotDevice(
                 farm?.farmer?.id ?? null,
                 farmId,
                 input.device_id,
@@ -231,19 +236,19 @@ export class HealthConsumer extends WorkerHost {
                   parameters: input.parameters,
                 },
               );
-              content = `Command dispatched: tool_call_id=${toolCall.id} status=${toolCall.status}`;
+              content = `Command dispatched: tool_call_id=${dispatched.id} status=${dispatched.status}`;
             } catch (err) {
               content = `Error: ${(err as Error).message}`;
             }
             return {
-              type: 'tool_result' as const,
-              tool_use_id: toolUse.id,
+              role: 'tool' as const,
+              tool_call_id: toolCall.id,
               content,
             };
           }),
-      );
+        );
 
-      messages.push({ role: 'user', content: toolResults });
+      messages.push(...toolResults);
     }
 
     const json = this.extractJson(rawText);
@@ -446,31 +451,34 @@ export class HealthConsumer extends WorkerHost {
     return parts.join('\n');
   }
 
-  private buildIotDeviceTool(): Anthropic.Tool {
+  private buildIotDeviceTool(): OpenAI.Chat.Completions.ChatCompletionTool {
     return {
-      name: 'trigger_iot_device',
-      description:
-        'Trigger a command on a registered IoT device. Use this to act on analysis findings — e.g. start irrigation when soil moisture is critically low, capture a field image when disease probability is high. Only trigger devices listed as active in the context.',
-      input_schema: {
-        type: 'object' as const,
-        properties: {
-          device_id: {
-            type: 'string',
-            description:
-              'The id field of the IoT device from the IOT DEVICES context',
+      type: 'function',
+      function: {
+        name: 'trigger_iot_device',
+        description:
+          'Trigger a command on a registered IoT device. Use this to act on analysis findings — e.g. start irrigation when soil moisture is critically low, capture a field image when disease probability is high. Only trigger devices listed as active in the context.',
+        parameters: {
+          type: 'object',
+          properties: {
+            device_id: {
+              type: 'string',
+              description:
+                'The id field of the IoT device from the IOT DEVICES context',
+            },
+            command_type: {
+              type: 'string',
+              enum: Object.values(IotCommandType),
+              description: 'Command to send to the device',
+            },
+            parameters: {
+              type: 'object',
+              description:
+                'Optional command parameters (e.g. { "duration_minutes": 30 } for irrigation)',
+            },
           },
-          command_type: {
-            type: 'string',
-            enum: Object.values(IotCommandType),
-            description: 'Command to send to the device',
-          },
-          parameters: {
-            type: 'object',
-            description:
-              'Optional command parameters (e.g. { "duration_minutes": 30 } for irrigation)',
-          },
+          required: ['device_id', 'command_type'],
         },
-        required: ['device_id', 'command_type'],
       },
     };
   }

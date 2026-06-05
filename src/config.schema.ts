@@ -48,4 +48,15 @@ export const configValidationSchema = Joi.object({
   S3_BUCKET_PUBLIC: Joi.string().optional(),
   S3_BUCKET_PRIVATE: Joi.string().optional(),
   S3_CDN_URL: Joi.string().optional(),
+
+  // ollama
+  OLLAMA_API_KEY: Joi.string().required(),
+  OLLAMA_MODEL: Joi.string().required(),
+  OLLAMA_VERSION: Joi.string().required(),
+  OLLAMA_KEEP_ALIVE: Joi.string().required(),
+  OLLAMA_MAX_LOADED_MODELS: Joi.number().required(),
+  OLLAMA_BASE_URL: Joi.string().required(),
+
+  // ml
+  PREDICTION_BASE_URL: Joi.string().required(),
 });
