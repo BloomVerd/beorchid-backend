@@ -9,11 +9,11 @@ export class AddFarmPredictionFields1749400000000 implements MigrationInterface 
       BEGIN
         IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'farms_growth_stage_enum') THEN
           CREATE TYPE "farms_growth_stage_enum" AS ENUM (
-            'germination',
-            'vegetative',
-            'flowering',
-            'fruiting',
-            'maturation'
+            'GERMINATION',
+            'VEGETATIVE',
+            'FLOWERING',
+            'FRUITING',
+            'HARVEST'
           );
         END IF;
       END $$

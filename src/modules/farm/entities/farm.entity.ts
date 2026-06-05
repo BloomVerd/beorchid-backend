@@ -18,6 +18,9 @@ import { Farmer } from '../../farmer/entities/farmer.entity';
 import { Coordinate } from './coordinate.entity';
 import { ImageData } from './image-data.entity';
 import { IotDevice } from './iot-device.entity';
+import { GrowthStage } from '../../health/entities/health.enums';
+
+export { GrowthStage };
 
 export enum CropType {
   MAIZE = 'MAIZE',
@@ -50,20 +53,11 @@ export enum SoilType {
   CHALK = 'CHALK',
 }
 
-export enum GrowthStage {
-  GERMINATION = 'germination',
-  VEGETATIVE = 'vegetative',
-  FLOWERING = 'flowering',
-  FRUITING = 'fruiting',
-  MATURATION = 'maturation',
-}
-
 registerEnumType(CropType, { name: 'CropType' });
 registerEnumType(SizeUnit, { name: 'SizeUnit' });
 registerEnumType(FarmType, { name: 'FarmType' });
 registerEnumType(SetupStatus, { name: 'SetupStatus' });
 registerEnumType(SoilType, { name: 'SoilType' });
-registerEnumType(GrowthStage, { name: 'GrowthStage' });
 
 @ObjectType()
 @Entity('farms')

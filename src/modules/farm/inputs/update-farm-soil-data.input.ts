@@ -1,6 +1,7 @@
 import { Field, Float, InputType, Int } from '@nestjs/graphql';
 import { IsOptional, IsNumber, IsArray, IsString, IsInt, Min } from 'class-validator';
-import { GrowthStage, SoilType } from '../entities/farm.entity';
+import { SoilType } from '../entities/farm.entity';
+import { GrowthStage } from '../../health/entities/health.enums';
 
 @InputType()
 export class UpdateFarmSoilDataInput {

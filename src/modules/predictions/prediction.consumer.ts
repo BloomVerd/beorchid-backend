@@ -8,6 +8,15 @@ import { Prediction, RiskLevel } from './entities/prediction.entity';
 import { PredictionRange } from './entities/prediction-range.entity';
 import { CropType, Farm } from '../farm/entities/farm.entity';
 import { ImageData, PredictionType } from '../farm/entities/image-data.entity';
+import { GrowthStage } from '../health/entities/health.enums';
+
+const GROWTH_STAGE_API_MAP: Record<GrowthStage, string> = {
+  [GrowthStage.GERMINATION]: 'germination',
+  [GrowthStage.VEGETATIVE]: 'vegetative',
+  [GrowthStage.FLOWERING]: 'flowering',
+  [GrowthStage.FRUITING]: 'fruiting',
+  [GrowthStage.HARVEST]: 'maturation',
+};
 
 const CROP_DAYS_TO_MATURITY: Record<CropType, number> = {
   [CropType.MAIZE]: 120,
@@ -186,7 +195,7 @@ export class PredictionConsumer extends WorkerHost {
     return {
       crop: farm.crop_type.charAt(0) + farm.crop_type.slice(1).toLowerCase(),
       soil_type: farm.soil_type?.toLowerCase() ?? 'loam',
-      growth_stage: farm.growth_stage ?? 'vegetative',
+      growth_stage: farm.growth_stage ? GROWTH_STAGE_API_MAP[farm.growth_stage] : 'vegetative',
       subplots: images.map((img) => ({
         image_url: img.url,
         latitude: img.lat,
