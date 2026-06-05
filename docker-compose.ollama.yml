@@ -5,8 +5,12 @@ services:
     restart: unless-stopped
     # Ollama is NOT published to the host directly — only nginx can reach it
     # over the internal network. Clients go through the API-key gateway.
-    expose:
-      - '11434'
+    # expose:
+    #   - '11434:11434'
+    # -
+    ports:
+      - '11434:11434'
+
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-24h}
