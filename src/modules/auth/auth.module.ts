@@ -10,12 +10,14 @@ import { RefreshToken } from './entities/refresh-token.entity';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { FarmerModule } from '../farmer/farmer.module';
 import { EmailModule } from '../email/email.module';
+import { PaymentModule } from '../payment/payment.module';
 
 @Module({
   imports: [
     ConfigModule,
     FarmerModule,
     EmailModule,
+    PaymentModule,
     TypeOrmModule.forFeature([MagicLinkToken, RefreshToken]),
     JwtModule.registerAsync({
       imports: [ConfigModule],

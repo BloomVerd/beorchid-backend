@@ -17,6 +17,7 @@ import { ChangePasswordInput } from './inputs/change-password.input';
 import { AuthPayload, MessageResponse } from './types/auth.types';
 import { HashHelper } from 'src/common/lib';
 import { EmailProducer } from '../email/email.producer';
+import { SubscriptionService } from '../payment/subscription.service';
 
 @Injectable()
 export class AuthService {
@@ -30,6 +31,7 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private emailProducer: EmailProducer,
+    private subscriptionService: SubscriptionService,
   ) {}
 
   async register(input: RegisterInput): Promise<AuthPayload> {
@@ -55,6 +57,13 @@ export class AuthService {
       email: farmer.email,
       firstName: farmer.firstName,
     });
+
+    // Assign free subscription — best-effort, don't fail registration if plans not seeded yet
+    try {
+      await this.subscriptionService.assignFreePlan(farmer.id);
+    } catch {
+      // Plans may not be seeded yet on first boot; subscription will be created on first access
+    }
 
     return this.issueTokens(farmer);
   }
@@ -211,6 +220,11 @@ export class AuthService {
         googleId: googleUser.googleId,
       });
       await this.farmerRepository.save(farmer);
+      try {
+        await this.subscriptionService.assignFreePlan(farmer.id);
+      } catch {
+        // Plans may not be seeded yet; subscription created on first access
+      }
     } else if (!farmer.googleId) {
       farmer.googleId = googleUser.googleId;
       await this.farmerRepository.save(farmer);

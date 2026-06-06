@@ -5,6 +5,7 @@ import { createDatabase } from 'src/common/lib/create-db';
 import { graphqlUploadExpress } from 'graphql-upload';
 import { ValidationPipe } from '@nestjs/common';
 import { FarmService } from './modules/farm/farm.service';
+import { SubscriptionPlanService } from './modules/payment/subscription-plan.service';
 
 async function bootstrap() {
   // Create main database
@@ -13,7 +14,7 @@ async function bootstrap() {
   // Create test database
   await createDatabase(process.env.DB_NAME_TEST!);
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   const configService = app.get(ConfigService);
 
@@ -37,5 +38,8 @@ async function bootstrap() {
 
   const farmService = app.get(FarmService);
   await farmService.setupIotRule();
+
+  const subscriptionPlanService = app.get(SubscriptionPlanService);
+  await subscriptionPlanService.setupPlans();
 }
 void bootstrap();

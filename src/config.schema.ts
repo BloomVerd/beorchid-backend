@@ -59,4 +59,7 @@ export const configValidationSchema = Joi.object({
 
   // ml
   PREDICTION_BASE_URL: Joi.string().required(),
+
+  // Paystack
+  PAYSTACK_SECRET_KEY: Joi.string().optional(),
 });

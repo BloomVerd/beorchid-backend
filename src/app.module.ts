@@ -17,6 +17,7 @@ import { UploadModule } from './modules/upload/upload.module';
 import { HealthModule } from './modules/health/health.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { FarmDataModule } from './modules/farm-data/farm-data.module';
+import { PaymentModule } from './modules/payment/payment.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { FarmDataModule } from './modules/farm-data/farm-data.module';
     HealthModule,
     ChatModule,
     FarmDataModule,
+    PaymentModule,
   ],
 })
 export class AppModule {}

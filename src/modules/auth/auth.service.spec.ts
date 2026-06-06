@@ -9,6 +9,7 @@ import { MagicLinkToken } from './entities/magic-link-token.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { EmailProducer } from '../email/email.producer';
 import { HashHelper } from 'src/common/lib';
+import { SubscriptionService } from '../payment/subscription.service';
 
 const makeFarmer = (overrides: Partial<Farmer> = {}): Farmer =>
   ({
@@ -48,6 +49,7 @@ describe('AuthService', () => {
   let jwtService: { sign: jest.Mock };
   let configService: { get: jest.Mock };
   let emailProducer: { sendWelcomeEmail: jest.Mock; sendMagicLink: jest.Mock };
+  let subscriptionService: { assignFreePlan: jest.Mock };
 
   beforeEach(async () => {
     farmerRepo = {
@@ -73,6 +75,9 @@ describe('AuthService', () => {
       sendWelcomeEmail: jest.fn().mockResolvedValue(undefined),
       sendMagicLink: jest.fn().mockResolvedValue(undefined),
     };
+    subscriptionService = {
+      assignFreePlan: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -89,6 +94,7 @@ describe('AuthService', () => {
         { provide: JwtService, useValue: jwtService },
         { provide: ConfigService, useValue: configService },
         { provide: EmailProducer, useValue: emailProducer },
+        { provide: SubscriptionService, useValue: subscriptionService },
       ],
     }).compile();
 
