@@ -1,7 +1,57 @@
 import { Field, Float, Int, ObjectType } from '@nestjs/graphql';
 import { CropType } from '../../farm/entities/farm.entity';
+import { PredictionType } from '../../farm/entities/image-data.entity';
 import { FarmHealth } from '../entities/farm-health.entity';
 import { HealthAlert } from '../entities/health-alert.entity';
+import { RiskLevel } from '../../predictions/entities/prediction.entity';
+
+@ObjectType()
+export class WeatherForecast {
+  @Field()
+  date: string;
+
+  @Field(() => Float)
+  temperature: number;
+
+  @Field(() => Float)
+  humidity: number;
+
+  @Field(() => Float)
+  rainfall: number;
+
+  @Field(() => Float)
+  windSpeed: number;
+
+  @Field()
+  description: string;
+
+  @Field()
+  icon: string;
+}
+
+@ObjectType()
+export class PredictionInsight {
+  @Field()
+  id: string;
+
+  @Field(() => PredictionType)
+  predictionType: PredictionType;
+
+  @Field(() => RiskLevel, { nullable: true })
+  riskLevel?: RiskLevel;
+
+  @Field(() => Float)
+  lat: number;
+
+  @Field(() => Float)
+  lon: number;
+
+  @Field({ nullable: true })
+  imageUrl?: string;
+
+  @Field()
+  createdAt: Date;
+}
 
 @ObjectType()
 export class FarmHealthSummary {
@@ -22,6 +72,12 @@ export class FarmHealthSummary {
 
   @Field(() => HealthAlert, { nullable: true })
   topAlert?: HealthAlert;
+
+  @Field(() => [WeatherForecast], { nullable: true })
+  weather?: WeatherForecast[];
+
+  @Field(() => [PredictionInsight], { nullable: true })
+  predictions?: PredictionInsight[];
 }
 
 @ObjectType()

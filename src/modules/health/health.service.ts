@@ -7,6 +7,8 @@ import {
   FarmHealthSummary,
   PaginatedFarmHealthSummaries,
 } from './types/health.types';
+import { WeatherService } from './weather.service';
+import { Prediction } from '../predictions/entities/prediction.entity';
 
 const SEVERITY_ORDER: Record<AlertSeverity, number> = {
   [AlertSeverity.CRITICAL]: 3,
@@ -19,6 +21,9 @@ export class HealthService {
   constructor(
     @InjectRepository(FarmHealth)
     private readonly farmHealthRepository: Repository<FarmHealth>,
+    @InjectRepository(Prediction)
+    private readonly predictionRepository: Repository<Prediction>,
+    private readonly weatherService: WeatherService,
   ) {}
 
   /**
@@ -96,6 +101,53 @@ export class HealthService {
         },
       ];
     });
+
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const [, allPredictions] = await Promise.all([
+      Promise.all(
+        data.map(async (summary) => {
+          const fh = recordMap.get(summary.farmId);
+          if (fh?.farm.lat != null && fh?.farm.lon != null) {
+            summary.weather = await this.weatherService.getForecast(
+              fh.farm.lat,
+              fh.farm.lon,
+            );
+          }
+        }),
+      ),
+      this.predictionRepository
+        .createQueryBuilder('p')
+        .innerJoin('p.farm', 'farm')
+        .addSelect('farm.id')
+        .leftJoinAndSelect('p.image', 'image')
+        .where('farm.id IN (:...farmIds)', { farmIds })
+        .andWhere('p.createdAt >= :weekAgo', { weekAgo })
+        .orderBy('p.createdAt', 'DESC')
+        .getMany(),
+    ]);
+
+    const predictionsByFarm = new Map<string, Prediction[]>();
+    for (const p of allPredictions) {
+      const fid = p.farm.id;
+      if (!predictionsByFarm.has(fid)) predictionsByFarm.set(fid, []);
+      predictionsByFarm.get(fid)!.push(p);
+    }
+
+    for (const summary of data) {
+      const preds = predictionsByFarm.get(summary.farmId);
+      if (preds?.length) {
+        summary.predictions = preds.map((p) => ({
+          id: p.id,
+          predictionType: p.prediction_type,
+          riskLevel: p.risk_level,
+          lat: p.lat,
+          lon: p.lon,
+          imageUrl: p.image?.url ?? undefined,
+          createdAt: p.createdAt,
+        }));
+      }
+    }
 
     return { data, total, page, lastPage: Math.ceil(total / limit) || 1 };
   }

@@ -12,6 +12,7 @@ import { YieldComparison } from './entities/yield-comparison.entity';
 import { Prediction } from '../predictions/entities/prediction.entity';
 import { HealthResolver } from './health.resolver';
 import { HealthService } from './health.service';
+import { WeatherService } from './weather.service';
 import { HealthProducer } from './health.producer';
 import { HealthScheduler } from './health.scheduler';
 import { HealthConsumer } from './health.consumer';
@@ -46,6 +47,7 @@ import { JwtStrategy } from 'src/common/strategies';
   providers: [
     HealthResolver,
     HealthService,
+    WeatherService,
     HealthProducer,
     HealthScheduler,
     HealthConsumer,
