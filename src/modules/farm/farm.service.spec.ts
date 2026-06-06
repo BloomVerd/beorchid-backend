@@ -54,6 +54,8 @@ import { IotToolCall, IotCommandType, IotToolCallStatus } from './entities/iot-t
 import { Farmer } from '../farmer/entities/farmer.entity';
 import { Coordinate } from './entities/coordinate.entity';
 import { PredictionRange } from '../predictions/entities/prediction-range.entity';
+import { SubscriptionService } from '../payment/subscription.service';
+import { PlanName } from '../payment/entities/subscription-plan.entity';
 
 const makeFarmer = (overrides: Partial<Farmer> = {}): Farmer =>
   ({ id: 'farmer-id-1', email: 'farmer@example.com', firstName: 'John', ...overrides }) as Farmer;
@@ -131,6 +133,7 @@ describe('FarmService', () => {
     getManyAndCount: jest.Mock;
   };
   let configService: { get: jest.Mock };
+  let subscriptionService: { getActiveSubscription: jest.Mock };
   let mockEm: {
     findOne: jest.Mock;
     count: jest.Mock;
@@ -192,6 +195,12 @@ describe('FarmService', () => {
       }),
     };
 
+    subscriptionService = {
+      getActiveSubscription: jest.fn().mockResolvedValue({
+        plan: { name: PlanName.POPULAR, displayName: 'Popular', maxFarms: 10 },
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         FarmService,
@@ -199,6 +208,7 @@ describe('FarmService', () => {
         { provide: getRepositoryToken(ImageData), useValue: imageRepo },
         { provide: getRepositoryToken(IotToolCall), useValue: iotToolCallRepo },
         { provide: ConfigService, useValue: configService },
+        { provide: SubscriptionService, useValue: subscriptionService },
       ],
     }).compile();
 
@@ -264,13 +274,26 @@ describe('FarmService', () => {
       );
     });
 
-    it('throws BadRequestException when farmer already has 10 farms', async () => {
+    it('throws SUBSCRIPTION_LIMIT_EXCEEDED when farmer has reached their plan farm limit', async () => {
       mockEm.findOne.mockResolvedValue(makeFarmer());
-      mockEm.count.mockResolvedValue(10);
+      mockEm.count.mockResolvedValue(10); // Popular plan maxFarms = 10
 
-      await expect(service.addFarm('farmer-id-1', input)).rejects.toThrow(
-        new BadRequestException('Farmers cannot create more than 10 farms'),
-      );
+      await expect(service.addFarm('farmer-id-1', input)).rejects.toMatchObject({
+        extensions: { code: 'SUBSCRIPTION_LIMIT_EXCEEDED', limitType: 'maxFarms' },
+      });
+    });
+
+    it('enforces free plan limit of 2 farms', async () => {
+      subscriptionService.getActiveSubscription.mockResolvedValue({
+        plan: { name: PlanName.FREE, displayName: 'Free', maxFarms: 2 },
+      });
+      mockEm.findOne.mockResolvedValue(makeFarmer());
+      mockEm.count.mockResolvedValue(2);
+
+      await expect(service.addFarm('farmer-id-1', input)).rejects.toMatchObject({
+        message: 'Your Free plan allows up to 2 farms',
+        extensions: { code: 'SUBSCRIPTION_LIMIT_EXCEEDED', limitType: 'maxFarms', currentPlan: 'free' },
+      });
     });
   });
 

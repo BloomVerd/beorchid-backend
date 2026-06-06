@@ -11,6 +11,7 @@ import { Farm } from '../farm/entities/farm.entity';
 import { Farmer } from '../farmer/entities/farmer.entity';
 import { PredictionProducer } from './prediction.producer';
 import { FarmerSettingsService } from '../farmer/farmer-settings.service';
+import { throwSubscriptionLimitError } from 'src/common/exceptions/subscription.exceptions';
 import { GenerateFarmPredictionResponse } from './types/generate-farm-prediction-response';
 import { PaginatedPredictions } from './types/paginated-predictions';
 
@@ -64,8 +65,9 @@ export class PredictionService {
 
       if (range) {
         if (range.regeneration_count >= settings.predictionWeeklyLimit) {
-          throw new BadRequestException(
+          throwSubscriptionLimitError(
             `You have exhausted your ${settings.predictionWeeklyLimit} predictions for this week`,
+            'predictionWeeklyLimit',
           );
         }
         range.regeneration_count += 1;

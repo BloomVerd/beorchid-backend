@@ -14,12 +14,14 @@ import { IotController } from './iot.controller';
 import { IotPubSubService } from './iot-pubsub.service';
 import { JsonScalar } from './scalars/json.scalar';
 import { FarmerModule } from '../farmer/farmer.module';
+import { PaymentModule } from '../payment/payment.module';
 import { JwtStrategy } from 'src/common/strategies';
 
 @Module({
   imports: [
     ConfigModule,
     FarmerModule,
+    PaymentModule,
     TypeOrmModule.forFeature([
       Farm,
       Coordinate,

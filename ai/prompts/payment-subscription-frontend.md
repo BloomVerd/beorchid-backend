@@ -196,6 +196,70 @@ On that page:
 
 ## Error Handling
 
+### Subscription limit errors (machine-readable codes)
+
+When a farmer hits a plan limit, the GraphQL error includes an `extensions` object with a `code` field. Check this **before** showing a generic error message — use it to show an upgrade prompt instead.
+
+```ts
+// Apollo Client example
+const isSubscriptionError = (err: GraphQLError) =>
+  err.extensions?.code === 'SUBSCRIPTION_LIMIT_EXCEEDED' ||
+  err.extensions?.code === 'PLAN_UPGRADE_REQUIRED';
+
+onError(({ graphQLErrors }) => {
+  for (const err of graphQLErrors ?? []) {
+    if (isSubscriptionError(err)) {
+      // Show upgrade modal / redirect to pricing page
+      showUpgradePrompt(err.extensions);
+      return;
+    }
+  }
+});
+```
+
+#### `SUBSCRIPTION_LIMIT_EXCEEDED`
+
+Thrown when the farmer has hit a hard resource limit on their current plan.
+
+```json
+{
+  "message": "Your Free plan allows up to 2 farms",
+  "extensions": {
+    "code": "SUBSCRIPTION_LIMIT_EXCEEDED",
+    "limitType": "maxFarms",
+    "currentPlan": "free"
+  }
+}
+```
+
+| `limitType` | Trigger |
+|---|---|
+| `maxFarms` | Tried to create a farm beyond the plan's `maxFarms` limit |
+| `predictionWeeklyLimit` | Tried to generate a prediction after exhausting weekly quota |
+
+`currentPlan` is present for `maxFarms` errors; absent for `predictionWeeklyLimit` (call `getMySubscription` if you need it).
+
+#### `PLAN_UPGRADE_REQUIRED`
+
+Thrown by the subscription guard when a feature requires a higher plan tier.
+
+```json
+{
+  "message": "This feature requires the popular plan or higher",
+  "extensions": {
+    "code": "PLAN_UPGRADE_REQUIRED",
+    "currentPlan": "free",
+    "requiredPlan": "popular"
+  }
+}
+```
+
+Use `requiredPlan` to pre-select the correct plan on the pricing/upgrade page.
+
+---
+
+### Other errors
+
 | GraphQL error | Cause |
 |---|---|
 | `"Cannot initiate payment for the free plan"` | `planId` points to the free plan |

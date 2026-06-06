@@ -29,6 +29,8 @@ import { RegisterIotDeviceInput } from './inputs/register-iot-device.input';
 import { TriggerIotDeviceInput } from './inputs/trigger-iot-device.input';
 import { PaginatedFarms, PaginatedImages } from './types/farm.types';
 import { PaginatedIotToolCalls } from './types/iot-tool-call.types';
+import { SubscriptionService } from '../payment/subscription.service';
+import { throwSubscriptionLimitError } from 'src/common/exceptions/subscription.exceptions';
 
 @Injectable()
 export class FarmService {
@@ -40,6 +42,7 @@ export class FarmService {
     @InjectRepository(IotToolCall)
     private iotToolCallRepository: Repository<IotToolCall>,
     private configService: ConfigService,
+    private subscriptionService: SubscriptionService,
   ) {}
 
   private buildIotClient(): AWS.Iot | null {
@@ -64,6 +67,10 @@ export class FarmService {
   }
 
   async addFarm(farmerId: string, input: CreateFarmInput): Promise<Farm> {
+    const subscription =
+      await this.subscriptionService.getActiveSubscription(farmerId);
+    const maxFarms = subscription.plan.maxFarms;
+
     return this.farmRepository.manager.transaction(async (em) => {
       const farmer = await em.findOne(Farmer, { where: { id: farmerId } });
       if (!farmer) throw new BadRequestException('Farmer not found');
@@ -71,9 +78,11 @@ export class FarmService {
       const farmCount = await em.count(Farm, {
         where: { farmer: { id: farmerId } },
       });
-      if (farmCount >= 10)
-        throw new BadRequestException(
-          'Farmers cannot create more than 10 farms',
+      if (farmCount >= maxFarms)
+        throwSubscriptionLimitError(
+          `Your ${subscription.plan.displayName} plan allows up to ${maxFarms} farm${maxFarms === 1 ? '' : 's'}`,
+          'maxFarms',
+          subscription.plan.name,
         );
 
       const farm = em.create(Farm, {

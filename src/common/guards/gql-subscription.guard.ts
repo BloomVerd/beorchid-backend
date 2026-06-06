@@ -1,7 +1,6 @@
 import {
   CanActivate,
   ExecutionContext,
-  ForbiddenException,
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -11,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { REQUIRED_PLAN_KEY } from '../decorators/require-plan.decorator';
 import { SubscriptionService } from 'src/modules/payment/subscription.service';
 import { PlanName } from 'src/modules/payment/entities/subscription-plan.entity';
+import { throwPlanUpgradeRequired } from '../exceptions/subscription.exceptions';
 
 const PLAN_HIERARCHY: Record<string, number> = {
   [PlanName.FREE]: 0,
@@ -62,9 +62,7 @@ export class GqlSubscriptionGuard implements CanActivate {
     const requiredLevel = PLAN_HIERARCHY[requiredPlan] ?? 0;
 
     if (farmerLevel < requiredLevel) {
-      throw new ForbiddenException(
-        `This feature requires the ${requiredPlan} plan or higher`,
-      );
+      throwPlanUpgradeRequired(subscription.plan.name, requiredPlan);
     }
 
     return true;

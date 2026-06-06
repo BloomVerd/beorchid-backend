@@ -157,7 +157,7 @@ describe('PredictionService', () => {
       expect(predictionProducer.createPrediction).toHaveBeenCalled();
     });
 
-    it('throws BadRequestException when regeneration_count has reached 3', async () => {
+    it('throws SUBSCRIPTION_LIMIT_EXCEEDED when regeneration_count has reached 3', async () => {
       const farmer = makeFarmer();
       const farm = makeFarm({ farm_images: [makeImage()] });
       const range = makePredictionRange({ regeneration_count: 3 });
@@ -168,7 +168,10 @@ describe('PredictionService', () => {
 
       await expect(
         service.generateFarmPredictions('farmer@example.com', 'farm-id-1'),
-      ).rejects.toThrow(new BadRequestException('You have exhausted your 3 predictions for this week'));
+      ).rejects.toMatchObject({
+        message: 'You have exhausted your 3 predictions for this week',
+        extensions: { code: 'SUBSCRIPTION_LIMIT_EXCEEDED', limitType: 'predictionWeeklyLimit' },
+      });
 
       expect(predictionProducer.createPrediction).not.toHaveBeenCalled();
     });
