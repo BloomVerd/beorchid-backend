@@ -322,13 +322,72 @@ describe('HealthService', () => {
   });
 
   describe('getFarmHealth', () => {
-    it('returns the farm health record when found', async () => {
+    const setupDetailQb = (predictions: ReturnType<typeof makePrediction>[] = []) => {
+      const predQb = makeQb();
+      predQb.getMany.mockResolvedValue(predictions);
+      predictionRepo.createQueryBuilder.mockReturnValue(predQb);
+    };
+
+    it('returns a FarmHealthDetail with the health record', async () => {
       const fh = makeFarmHealth();
       farmHealthRepo.findOne.mockResolvedValue(fh);
+      setupDetailQb();
 
       const result = await service.getFarmHealth('farmer-id-1', 'farm-id-1');
 
-      expect(result).toBe(fh);
+      expect(result.health).toBe(fh);
+    });
+
+    it('attaches weather when farm has lat and lon', async () => {
+      const farm = makeFarm({ id: 'farm-id-1', lat: 5.6, lon: -0.2 });
+      const fh = makeFarmHealth({ farm: farm as any });
+      const forecasts = makeWeatherForecast();
+      weatherService.getForecast.mockResolvedValue(forecasts);
+      farmHealthRepo.findOne.mockResolvedValue(fh);
+      setupDetailQb();
+
+      const result = await service.getFarmHealth('farmer-id-1', 'farm-id-1');
+
+      expect(weatherService.getForecast).toHaveBeenCalledWith(5.6, -0.2);
+      expect(result.weather).toEqual(forecasts);
+    });
+
+    it('does not attach weather when farm has no coordinates', async () => {
+      const fh = makeFarmHealth();
+      farmHealthRepo.findOne.mockResolvedValue(fh);
+      setupDetailQb();
+
+      const result = await service.getFarmHealth('farmer-id-1', 'farm-id-1');
+
+      expect(weatherService.getForecast).not.toHaveBeenCalled();
+      expect(result.weather).toBeUndefined();
+    });
+
+    it('attaches predictions from the past week', async () => {
+      const fh = makeFarmHealth();
+      const pred = makePrediction('farm-id-1', { image: { url: 'https://cdn.example.com/img.jpg' } });
+      farmHealthRepo.findOne.mockResolvedValue(fh);
+      setupDetailQb([pred]);
+
+      const result = await service.getFarmHealth('farmer-id-1', 'farm-id-1');
+
+      expect(result.predictions).toHaveLength(1);
+      expect(result.predictions![0]).toMatchObject({
+        id: pred.id,
+        predictionType: PredictionType.DISEASE_PREDICTION,
+        riskLevel: RiskLevel.HIGH,
+        imageUrl: 'https://cdn.example.com/img.jpg',
+      });
+    });
+
+    it('sets predictions to undefined when none exist', async () => {
+      const fh = makeFarmHealth();
+      farmHealthRepo.findOne.mockResolvedValue(fh);
+      setupDetailQb([]);
+
+      const result = await service.getFarmHealth('farmer-id-1', 'farm-id-1');
+
+      expect(result.predictions).toBeUndefined();
     });
 
     it('throws NotFoundException when no health data is found', async () => {

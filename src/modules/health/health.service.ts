@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { FarmHealth } from './entities/farm-health.entity';
 import { AlertSeverity } from './entities/health.enums';
 import {
+  FarmHealthDetail,
   FarmHealthSummary,
   PaginatedFarmHealthSummaries,
 } from './types/health.types';
@@ -157,7 +158,7 @@ export class HealthService {
    * all nested health data (crop fields, disease alerts, health alerts,
    * sensor history, yield comparisons).
    */
-  async getFarmHealth(farmerId: string, farmId: string): Promise<FarmHealth> {
+  async getFarmHealth(farmerId: string, farmId: string): Promise<FarmHealthDetail> {
     const farmHealth = await this.farmHealthRepository.findOne({
       where: { farm: { id: farmId, farmer: { id: farmerId } } },
       relations: [
@@ -177,6 +178,33 @@ export class HealthService {
       );
     }
 
-    return farmHealth;
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const [weather, rawPredictions] = await Promise.all([
+      farmHealth.farm.lat != null && farmHealth.farm.lon != null
+        ? this.weatherService.getForecast(farmHealth.farm.lat, farmHealth.farm.lon)
+        : Promise.resolve(undefined),
+      this.predictionRepository
+        .createQueryBuilder('p')
+        .leftJoinAndSelect('p.image', 'image')
+        .where('p."farmId" = :farmId', { farmId })
+        .andWhere('p.createdAt >= :weekAgo', { weekAgo })
+        .orderBy('p.createdAt', 'DESC')
+        .getMany(),
+    ]);
+
+    const predictions = rawPredictions.length
+      ? rawPredictions.map((p) => ({
+          id: p.id,
+          predictionType: p.prediction_type,
+          riskLevel: p.risk_level,
+          lat: p.lat,
+          lon: p.lon,
+          imageUrl: p.image?.url ?? undefined,
+          createdAt: p.createdAt,
+        }))
+      : undefined;
+
+    return { health: farmHealth, weather, predictions };
   }
 }

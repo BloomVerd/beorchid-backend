@@ -81,6 +81,18 @@ export class FarmHealthSummary {
 }
 
 @ObjectType()
+export class FarmHealthDetail {
+  @Field(() => FarmHealth)
+  health: FarmHealth;
+
+  @Field(() => [WeatherForecast], { nullable: true })
+  weather?: WeatherForecast[];
+
+  @Field(() => [PredictionInsight], { nullable: true })
+  predictions?: PredictionInsight[];
+}
+
+@ObjectType()
 export class PaginatedFarmHealthSummaries {
   @Field(() => [FarmHealthSummary])
   data: FarmHealthSummary[];

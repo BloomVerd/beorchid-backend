@@ -2,7 +2,7 @@ import { Args, Int, Query, Resolver } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { HealthService } from './health.service';
 import { FarmHealth } from './entities/farm-health.entity';
-import { PaginatedFarmHealthSummaries } from './types/health.types';
+import { FarmHealthDetail, PaginatedFarmHealthSummaries } from './types/health.types';
 import { GqlJwtAuthGuard } from 'src/common/guards';
 import { CurrentFarmer } from 'src/common/decorators';
 import { Farmer } from '../farmer/entities/farmer.entity';
@@ -30,7 +30,7 @@ export class HealthResolver {
    * crop field health, disease alerts, health alerts, sensor history, and
    * yield comparisons. Used by the /health/[farmId] detail page.
    */
-  @Query(() => FarmHealth)
+  @Query(() => FarmHealthDetail)
   @UseGuards(GqlJwtAuthGuard)
   getFarmHealth(
     @Args('farmId') farmId: string,
