@@ -246,6 +246,7 @@ describe('SubscriptionService', () => {
         popularPlan.priceAmount,
         expect.any(String),
         expect.any(Object),
+        undefined,
       );
       expect(result.authorizationUrl).toBe('https://paystack.com/pay/xyz');
       expect(result.reference).toBeDefined();

@@ -70,6 +70,7 @@ export class SubscriptionService {
     farmerId: string,
     farmerEmail: string,
     planId: string,
+    callbackUrl?: string,
   ): Promise<{ authorizationUrl: string; reference: string }> {
     const newPlan = await this.planService.findById(planId);
     if (!newPlan || !newPlan.isActive) {
@@ -126,6 +127,7 @@ export class SubscriptionService {
         chargeAmount,
         reference,
         { farmerId, planId, ...prorationMetadata },
+        callbackUrl,
       );
 
     await this.transactionRepo.save(

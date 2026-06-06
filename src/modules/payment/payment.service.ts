@@ -40,14 +40,18 @@ export class PaymentService {
     amount: number,
     reference: string,
     metadata: Record<string, unknown> = {},
+    callbackUrl?: string,
   ): Promise<{ authorizationUrl: string; accessCode: string }> {
+    const body: Record<string, unknown> = { email, amount, reference, metadata };
+    if (callbackUrl) body.callback_url = callbackUrl;
+
     const response = await fetch(`${this.baseUrl}/transaction/initialize`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.secretKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ email, amount, reference, metadata }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {

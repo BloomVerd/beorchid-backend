@@ -41,6 +41,7 @@ export class SubscriptionResolver {
       farmerRecord.id,
       farmerRecord.email,
       input.planId,
+      input.callbackUrl,
     );
   }
 }
