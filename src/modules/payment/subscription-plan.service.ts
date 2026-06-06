@@ -12,6 +12,7 @@ const PLANS: Omit<SubscriptionPlan, 'id' | 'createdAt' | 'updatedAt'>[] = [
     displayName: 'Free',
     priceAmount: 0,
     currency: 'GHS',
+    durationDays: 0,
     predictionWeeklyLimit: 3,
     farmDataLookbackSeconds: 3600,
     farmDataCacheTtlSeconds: 3600,
@@ -23,8 +24,9 @@ const PLANS: Omit<SubscriptionPlan, 'id' | 'createdAt' | 'updatedAt'>[] = [
   {
     name: PlanName.POPULAR,
     displayName: 'Popular',
-    priceAmount: 2000,
+    priceAmount: 200000,
     currency: 'GHS',
+    durationDays: 365,
     predictionWeeklyLimit: 15,
     farmDataLookbackSeconds: 86400,
     farmDataCacheTtlSeconds: 3600,
@@ -41,8 +43,9 @@ const PLANS: Omit<SubscriptionPlan, 'id' | 'createdAt' | 'updatedAt'>[] = [
   {
     name: PlanName.PREMIUM,
     displayName: 'Premium',
-    priceAmount: 5000,
+    priceAmount: 500000,
     currency: 'GHS',
+    durationDays: 365,
     predictionWeeklyLimit: 50,
     farmDataLookbackSeconds: 604800,
     farmDataCacheTtlSeconds: 3600,
@@ -71,7 +74,9 @@ export class SubscriptionPlanService {
       const existing = await this.planRepo.findOne({
         where: { name: plan.name },
       });
-      if (!existing) {
+      if (existing) {
+        await this.planRepo.save({ ...existing, ...plan });
+      } else {
         await this.planRepo.save(this.planRepo.create(plan));
         console.log(`Subscription plan '${plan.name}' created`);
       }

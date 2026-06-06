@@ -29,7 +29,9 @@ query ListSubscriptionPlans {
 
 | | Free | Popular | Premium |
 |---|---|---|---|
-| priceAmount | 0 | 2000 (GHS 20/mo) | 5000 (GHS 50/mo) |
+| priceAmount (pesewas) | 0 | 200000 | 500000 |
+| Display (÷ 100) | GHS 0 | GHS 2000/yr | GHS 5000/yr |
+| durationDays | 0 (perpetual) | 365 | 365 |
 | predictionWeeklyLimit | 3 | 15 | 50 |
 | maxFarms | 2 | 10 | 50 |
 
@@ -204,7 +206,7 @@ On that page:
 
 ## Display Recommendations
 
-- Format `priceAmount` as `GHS ${(priceAmount / 100).toFixed(2)}` — e.g. `2000` → `GHS 20.00`.
+- `priceAmount` is stored in pesewas (smallest unit). Format for display as `GHS ${(priceAmount / 100).toFixed(2)}` — e.g. `200000` → `GHS 2000.00`.
 - Show `currentPeriodEnd` as a formatted date for paid plans. For free (`null`) show "No expiry".
 - Disable the CTA button for the plan the user is already on.
 - Disable the button immediately after calling the mutation to prevent double submissions.

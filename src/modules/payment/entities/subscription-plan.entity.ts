@@ -56,6 +56,10 @@ export class SubscriptionPlan {
   @Column({ type: 'int', default: 2 })
   maxFarms: number;
 
+  @Field(() => Int)
+  @Column({ type: 'int', default: 0 })
+  durationDays: number;
+
   @Field(() => [String])
   @Column({ type: 'simple-json', default: '[]' })
   features: string[];

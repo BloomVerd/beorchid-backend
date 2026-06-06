@@ -13,6 +13,7 @@ const makePlan = (overrides: Partial<SubscriptionPlan> = {}): SubscriptionPlan =
     displayName: 'Free',
     priceAmount: 0,
     currency: 'GHS',
+    durationDays: 0,
     predictionWeeklyLimit: 3,
     farmDataLookbackSeconds: 3600,
     farmDataCacheTtlSeconds: 3600,
@@ -70,7 +71,7 @@ describe('SubscriptionPlanService', () => {
       expect(savedNames).toContain(PlanName.PREMIUM);
     });
 
-    it('skips plans that already exist', async () => {
+    it('upserts the existing plan and creates the two missing ones', async () => {
       planRepo.findOne
         .mockResolvedValueOnce(makePlan({ name: PlanName.FREE }))
         .mockResolvedValueOnce(null)
@@ -80,15 +81,17 @@ describe('SubscriptionPlanService', () => {
 
       await service.setupPlans();
 
-      expect(planRepo.save).toHaveBeenCalledTimes(2);
+      // 1 upsert for the existing plan + 2 creates for the missing ones
+      expect(planRepo.save).toHaveBeenCalledTimes(3);
     });
 
-    it('does not call save when all plans already exist', async () => {
+    it('upserts all plans when all already exist', async () => {
       planRepo.findOne.mockResolvedValue(makePlan());
+      planRepo.save.mockResolvedValue({});
 
       await service.setupPlans();
 
-      expect(planRepo.save).not.toHaveBeenCalled();
+      expect(planRepo.save).toHaveBeenCalledTimes(3);
     });
   });
 

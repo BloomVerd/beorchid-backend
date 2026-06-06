@@ -27,8 +27,9 @@ const makePlan = (
     id: `plan-${name}`,
     name,
     displayName: name.charAt(0).toUpperCase() + name.slice(1),
-    priceAmount: name === PlanName.FREE ? 0 : name === PlanName.POPULAR ? 2000 : 5000,
+    priceAmount: name === PlanName.FREE ? 0 : name === PlanName.POPULAR ? 200000 : 500000,
     currency: 'GHS',
+    durationDays: name === PlanName.FREE ? 0 : 365,
     predictionWeeklyLimit: name === PlanName.FREE ? 3 : name === PlanName.POPULAR ? 15 : 50,
     farmDataLookbackSeconds: 3600,
     farmDataCacheTtlSeconds: 3600,
@@ -253,12 +254,12 @@ describe('SubscriptionService', () => {
     });
 
     it('applies proration credit when upgrading from a paid plan mid-period', async () => {
-      const popularPlan = makePlan(PlanName.POPULAR, { priceAmount: 2000 });
-      const premiumPlan = makePlan(PlanName.PREMIUM, { priceAmount: 5000 });
+      const popularPlan = makePlan(PlanName.POPULAR);   // 200000 pesewas, 365 days
+      const premiumPlan = makePlan(PlanName.PREMIUM);   // 500000 pesewas, 365 days
 
-      // Current subscription: popular, with 15 days of 30 remaining
-      const periodStart = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
-      const periodEnd = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
+      // Current subscription: popular, with 182 of 365 days remaining (half-year)
+      const periodStart = new Date(Date.now() - 183 * 24 * 60 * 60 * 1000);
+      const periodEnd = new Date(Date.now() + 182 * 24 * 60 * 60 * 1000);
       const currentSub = makeSubscription({
         plan: popularPlan,
         currentPeriodStart: periodStart,
@@ -271,24 +272,24 @@ describe('SubscriptionService', () => {
         authorizationUrl: 'https://paystack.com/pay/upgrade',
         accessCode: 'acc_upgrade',
       });
-      transactionRepo.create.mockReturnValue(makeTransaction({ amount: 4000 }));
-      transactionRepo.save.mockResolvedValue(makeTransaction({ amount: 4000 }));
+      transactionRepo.create.mockReturnValue(makeTransaction({ amount: 400000 }));
+      transactionRepo.save.mockResolvedValue(makeTransaction({ amount: 400000 }));
 
       await service.initiatePayment('farmer-1', 'farmer@example.com', 'plan-premium');
 
       const [, amount] = paymentService.initializeTransaction.mock.calls[0];
-      // Credit ~1000 (half of 2000), so charged ~4000
+      // Credit ~100000 pesewas (half of 200000), so charged ~400000 pesewas
       expect(amount).toBeLessThan(premiumPlan.priceAmount);
       expect(amount).toBeGreaterThan(0);
     });
 
     it('activates immediately when credit covers full new plan cost (downgrade)', async () => {
-      const premiumPlan = makePlan(PlanName.PREMIUM, { priceAmount: 5000 });
-      const popularPlan = makePlan(PlanName.POPULAR, { priceAmount: 2000 });
+      const premiumPlan = makePlan(PlanName.PREMIUM);   // 500000 pesewas, 365 days
+      const popularPlan = makePlan(PlanName.POPULAR);   // 200000 pesewas, 365 days
 
-      // Premium with 29 of 30 days remaining → credit ~4833 > popular cost 2000
+      // Premium with 364 of 365 days remaining → credit ~498630 > popular cost 200000
       const periodStart = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000);
-      const periodEnd = new Date(Date.now() + 29 * 24 * 60 * 60 * 1000);
+      const periodEnd = new Date(Date.now() + 364 * 24 * 60 * 60 * 1000);
       const currentSub = makeSubscription({
         plan: premiumPlan,
         currentPeriodStart: periodStart,

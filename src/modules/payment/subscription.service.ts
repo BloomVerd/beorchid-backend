@@ -175,7 +175,7 @@ export class SubscriptionService {
 
     const periodStart = new Date();
     const periodEnd = new Date(periodStart);
-    periodEnd.setDate(periodEnd.getDate() + 30);
+    periodEnd.setDate(periodEnd.getDate() + plan.durationDays);
 
     const subscription = await this.subscriptionRepo.save(
       this.subscriptionRepo.create({
@@ -219,7 +219,7 @@ export class SubscriptionService {
     // Extend period based on leftover credit value
     const now = new Date();
     const remainingDays = Math.floor(
-      (credit / currentSub.plan.priceAmount) * 30,
+      (credit / currentSub.plan.priceAmount) * currentSub.plan.durationDays,
     );
     const newPeriodEnd = new Date(now);
     newPeriodEnd.setDate(newPeriodEnd.getDate() + remainingDays);
