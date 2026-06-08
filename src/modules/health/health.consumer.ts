@@ -9,7 +9,7 @@ import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { createDynamoDBClient } from 'src/common/config/dynamodb.config';
 import { createLlmClient, getLlmModel } from 'src/common/config/llm.config';
 import { Farm } from '../farm/entities/farm.entity';
-import { IotDevice } from '../farm/entities/iot-device.entity';
+import { DeviceStatus, IotDevice } from '../farm/entities/iot-device.entity';
 import { FarmHealth } from './entities/farm-health.entity';
 import { CropFieldHealth } from './entities/crop-field-health.entity';
 import { DiseaseAlert } from './entities/disease-alert.entity';
@@ -348,6 +348,22 @@ export class HealthConsumer extends WorkerHost {
           )
         : Promise.resolve(),
     ]);
+
+    if (iotDevices.length) {
+      const activeDeviceIds = new Set(
+        telemetry.map((t) => t.device_id).filter(Boolean),
+      );
+      await this.iotDeviceRepo.save(
+        iotDevices.map((device) => ({
+          ...device,
+          status: !device.is_active
+            ? DeviceStatus.INACTIVE
+            : activeDeviceIds.has(device.device_id)
+              ? DeviceStatus.ONLINE
+              : DeviceStatus.OFFLINE,
+        })),
+      );
+    }
   }
 
   private async queryTelemetry(

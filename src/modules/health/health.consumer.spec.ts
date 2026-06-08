@@ -5,7 +5,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { HealthConsumer } from './health.consumer';
 import { Farm } from '../farm/entities/farm.entity';
-import { IotDevice } from '../farm/entities/iot-device.entity';
+import { DeviceStatus, IotDevice } from '../farm/entities/iot-device.entity';
 import { FarmHealth } from './entities/farm-health.entity';
 import { CropFieldHealth } from './entities/crop-field-health.entity';
 import { DiseaseAlert } from './entities/disease-alert.entity';
@@ -91,7 +91,7 @@ const makeLlmHealthResponse = (overrides: object = {}) => ({
 describe('HealthConsumer', () => {
   let consumer: HealthConsumer;
   let farmRepo: { findOne: jest.Mock };
-  let iotDeviceRepo: { find: jest.Mock };
+  let iotDeviceRepo: { find: jest.Mock; save: jest.Mock };
   let farmHealthRepo: { create: jest.Mock; save: jest.Mock };
   let cropFieldHealthRepo: { create: jest.Mock; save: jest.Mock };
   let diseaseAlertRepo: { create: jest.Mock; save: jest.Mock };
@@ -108,7 +108,7 @@ describe('HealthConsumer', () => {
     const savedHealth = { id: 'health-saved-1' };
 
     farmRepo = { findOne: jest.fn().mockResolvedValue(makeFarm()) };
-    iotDeviceRepo = { find: jest.fn().mockResolvedValue([]) };
+    iotDeviceRepo = { find: jest.fn().mockResolvedValue([]), save: jest.fn().mockResolvedValue([]) };
     farmHealthRepo = {
       create: jest.fn().mockImplementation((d) => d),
       save: jest.fn().mockResolvedValue(savedHealth),
@@ -312,5 +312,75 @@ describe('HealthConsumer', () => {
       });
       expect(farmHealthRepo.save).toHaveBeenCalled();
     });
+
+    it('marks a device ONLINE when its device_id appears in telemetry', async () => {
+      const device = { id: 'dev-1', device_id: 'device-1', is_active: true };
+      iotDeviceRepo.find.mockResolvedValue([device]);
+      dynamodbSend.mockResolvedValue({
+        Items: [{ farm_id: 'farm-1', timestamp: new Date().toISOString(), device_id: 'device-1' }],
+      });
+
+      await consumer.process(makeJob({ farmIds: ['farm-1'] }) as any);
+
+      const saved: any[] = iotDeviceRepo.save.mock.calls[0][0];
+      expect(saved.find((d) => d.id === 'dev-1').status).toBe(DeviceStatus.ONLINE);
+    });
+
+    it('marks a device OFFLINE when active but its device_id is absent from telemetry', async () => {
+      const device = { id: 'dev-1', device_id: 'device-99', is_active: true };
+      iotDeviceRepo.find.mockResolvedValue([device]);
+      dynamodbSend.mockResolvedValue({
+        Items: [{ farm_id: 'farm-1', timestamp: new Date().toISOString(), device_id: 'device-other' }],
+      });
+
+      await consumer.process(makeJob({ farmIds: ['farm-1'] }) as any);
+
+      const saved: any[] = iotDeviceRepo.save.mock.calls[0][0];
+      expect(saved.find((d) => d.id === 'dev-1').status).toBe(DeviceStatus.OFFLINE);
+    });
+
+    it('marks a device INACTIVE when is_active is false regardless of telemetry', async () => {
+      const device = { id: 'dev-1', device_id: 'device-1', is_active: false };
+      iotDeviceRepo.find.mockResolvedValue([device]);
+      dynamodbSend.mockResolvedValue({
+        Items: [{ farm_id: 'farm-1', timestamp: new Date().toISOString(), device_id: 'device-1' }],
+      });
+
+      await consumer.process(makeJob({ farmIds: ['farm-1'] }) as any);
+
+      const saved: any[] = iotDeviceRepo.save.mock.calls[0][0];
+      expect(saved.find((d) => d.id === 'dev-1').status).toBe(DeviceStatus.INACTIVE);
+    });
+
+    it('skips the device status save when there are no devices for the farm', async () => {
+      iotDeviceRepo.find.mockResolvedValue([]);
+
+      await consumer.process(makeJob({ farmIds: ['farm-1'] }) as any);
+
+      expect(iotDeviceRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('assigns correct statuses across a mixed batch of devices', async () => {
+      const devices = [
+        { id: 'dev-online',   device_id: 'device-online',   is_active: true  },
+        { id: 'dev-offline',  device_id: 'device-offline',  is_active: true  },
+        { id: 'dev-inactive', device_id: 'device-inactive', is_active: false },
+      ];
+      iotDeviceRepo.find.mockResolvedValue(devices);
+      dynamodbSend.mockResolvedValue({
+        Items: [
+          { farm_id: 'farm-1', timestamp: new Date().toISOString(), device_id: 'device-online' },
+          { farm_id: 'farm-1', timestamp: new Date().toISOString(), device_id: 'device-inactive' },
+        ],
+      });
+
+      await consumer.process(makeJob({ farmIds: ['farm-1'] }) as any);
+
+      const saved: any[] = iotDeviceRepo.save.mock.calls[0][0];
+      expect(saved.find((d) => d.id === 'dev-online').status).toBe(DeviceStatus.ONLINE);
+      expect(saved.find((d) => d.id === 'dev-offline').status).toBe(DeviceStatus.OFFLINE);
+      expect(saved.find((d) => d.id === 'dev-inactive').status).toBe(DeviceStatus.INACTIVE);
+    });
   });
 });
+

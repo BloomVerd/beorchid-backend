@@ -5,7 +5,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { Field, ID, ObjectType, registerEnumType } from '@nestjs/graphql';
+import { Field, Float, ID, ObjectType, registerEnumType } from '@nestjs/graphql';
 import { Farm } from './farm.entity';
 
 export enum DeviceType {
@@ -19,7 +19,14 @@ export enum DeviceType {
   OTHER = 'OTHER',
 }
 
+export enum DeviceStatus {
+  ONLINE = 'ONLINE',     // sent telemetry within the last lookback window
+  OFFLINE = 'OFFLINE',   // registered but no recent telemetry
+  INACTIVE = 'INACTIVE', // not yet activated (is_active = false)
+}
+
 registerEnumType(DeviceType, { name: 'DeviceType' });
+registerEnumType(DeviceStatus, { name: 'DeviceStatus' });
 
 @ObjectType()
 @Entity('iot_devices')
@@ -43,6 +50,10 @@ export class IotDevice {
   @Field()
   @Column({ default: false })
   is_active: boolean;
+
+  @Field(() => DeviceStatus)
+  @Column({ type: 'enum', enum: DeviceStatus, default: DeviceStatus.INACTIVE })
+  status: DeviceStatus;
 
   @Field()
   @CreateDateColumn()
@@ -73,6 +84,14 @@ export class IotDevice {
   @Field({ nullable: true })
   @Column({ type: 'text', nullable: true })
   public_key?: string;
+
+  @Field(() => Float, { nullable: true })
+  @Column({ type: 'float', nullable: true })
+  lat?: number;
+
+  @Field(() => Float, { nullable: true })
+  @Column({ type: 'float', nullable: true })
+  lon?: number;
 
   @ManyToOne(() => Farm, 'iot_devices', { onDelete: 'CASCADE' })
   farm: Farm;

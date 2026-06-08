@@ -49,7 +49,7 @@ import * as AWS from 'aws-sdk';
 import { FarmService } from './farm.service';
 import { Farm, SetupStatus, CropType, FarmType } from './entities/farm.entity';
 import { ImageData, PredictionType } from './entities/image-data.entity';
-import { IotDevice, DeviceType } from './entities/iot-device.entity';
+import { IotDevice, DeviceType, DeviceStatus } from './entities/iot-device.entity';
 import { IotToolCall, IotCommandType, IotToolCallStatus } from './entities/iot-tool-call.entity';
 import { Farmer } from '../farmer/entities/farmer.entity';
 import { Coordinate } from './entities/coordinate.entity';
@@ -83,6 +83,9 @@ const makeDevice = (overrides: Partial<IotDevice> = {}): IotDevice =>
     label: 'Soil Sensor',
     device_type: DeviceType.SOIL_MOISTURE_SENSOR,
     is_active: false,
+    status: DeviceStatus.INACTIVE,
+    lat: undefined,
+    lon: undefined,
     thing_name: 'farm_farm-id-1_device-uuid-1',
     thing_arn: 'arn:aws:iot:us-east-1:784608886729:thing/farm_farm-id-1_device-uuid-1',
     certificate_id: 'cert-id',
@@ -555,6 +558,52 @@ describe('FarmService', () => {
           target: 'cert-arn',
         }),
       );
+    });
+
+    it('stores explicit lat/lon from input on the device', async () => {
+      const farm = makeFarm({ lat: 5.0, lon: -1.0 });
+      const device = makeDevice({ lat: 6.5, lon: -2.5 });
+      mockEm.findOne.mockResolvedValue(farm);
+      mockEm.create.mockReturnValue(device);
+      mockEm.save.mockResolvedValue(device);
+
+      await service.registerIotDevice('farmer-id-1', 'farm-id-1', {
+        ...input,
+        lat: 6.5,
+        lon: -2.5,
+      } as any);
+
+      const createCall = mockEm.create.mock.calls[0][1];
+      expect(createCall.lat).toBe(6.5);
+      expect(createCall.lon).toBe(-2.5);
+    });
+
+    it('falls back to farm lat/lon when input omits coordinates', async () => {
+      const farm = makeFarm({ lat: 5.5, lon: -1.5 });
+      const device = makeDevice({ lat: 5.5, lon: -1.5 });
+      mockEm.findOne.mockResolvedValue(farm);
+      mockEm.create.mockReturnValue(device);
+      mockEm.save.mockResolvedValue(device);
+
+      await service.registerIotDevice('farmer-id-1', 'farm-id-1', input as any);
+
+      const createCall = mockEm.create.mock.calls[0][1];
+      expect(createCall.lat).toBe(5.5);
+      expect(createCall.lon).toBe(-1.5);
+    });
+
+    it('stores undefined lat/lon when neither input nor farm has coordinates', async () => {
+      const farm = makeFarm();
+      const device = makeDevice();
+      mockEm.findOne.mockResolvedValue(farm);
+      mockEm.create.mockReturnValue(device);
+      mockEm.save.mockResolvedValue(device);
+
+      await service.registerIotDevice('farmer-id-1', 'farm-id-1', input as any);
+
+      const createCall = mockEm.create.mock.calls[0][1];
+      expect(createCall.lat).toBeUndefined();
+      expect(createCall.lon).toBeUndefined();
     });
 
     it('throws BadRequestException when farm is not found', async () => {

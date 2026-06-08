@@ -410,6 +410,8 @@ export class FarmService {
         certificate_pem: certificatePem,
         private_key: privateKey,
         public_key: publicKey,
+        lat: input.lat ?? farm.lat,
+        lon: input.lon ?? farm.lon,
         farm,
       });
 

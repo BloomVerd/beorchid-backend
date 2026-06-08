@@ -15,11 +15,21 @@ export class InitialSchema1748700000000 implements MigrationInterface {
       ['farms_farm_type_enum', ['FIELD', 'GREENHOUSE']],
       ['farms_setup_status_enum', ['PENDING', 'IN_PROGRESS', 'COMPLETE']],
       ['farms_soil_type_enum', ['CLAY', 'SANDY', 'LOAM', 'SILT', 'PEAT', 'CHALK']],
+      ['farms_growth_stage_enum', [
+        'GERMINATION', 'VEGETATIVE', 'FLOWERING', 'FRUITING', 'HARVEST',
+      ]],
       ['iot_devices_device_type_enum', [
         'SOIL_MOISTURE_SENSOR', 'WEATHER_STATION', 'IRRIGATION_CONTROLLER',
         'AERIAL_SCOUT_DRONE', 'FIELD_CAMERA', 'TEMPERATURE_SENSOR',
         'HUMIDITY_SENSOR', 'OTHER',
       ]],
+      ['iot_devices_status_enum', ['ONLINE', 'OFFLINE', 'INACTIVE']],
+      ['iot_command_type_enum', [
+        'IRRIGATE', 'STOP_IRRIGATION', 'CAPTURE_IMAGE',
+        'ACTIVATE_SENSOR', 'DEACTIVATE_SENSOR',
+      ]],
+      ['iot_tool_call_status_enum', ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED']],
+      ['chat_messages_role_enum', ['user', 'assistant']],
       ['predictions_prediction_type_enum', ['DISEASE_PREDICTION', 'YIELD_PREDICTION']],
       ['predictions_risk_level_enum', ['low', 'moderate', 'high']],
       ['crop_field_health_crop_type_enum', ['MAIZE', 'RICE', 'CASSAVA', 'VEGETABLES']],
@@ -91,25 +101,28 @@ export class InitialSchema1748700000000 implements MigrationInterface {
     // --- farms ---
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "farms" (
-        "id"              UUID                       NOT NULL DEFAULT uuid_generate_v4(),
-        "name"            CHARACTER VARYING          NOT NULL,
-        "crop_type"       "farms_crop_type_enum"     NOT NULL DEFAULT 'MAIZE',
-        "variety"         CHARACTER VARYING                   NULL,
-        "farm_size"       DOUBLE PRECISION           NOT NULL,
-        "size_unit"       "farms_size_unit_enum"     NOT NULL DEFAULT 'HECTARES',
-        "farm_type"       "farms_farm_type_enum"     NOT NULL DEFAULT 'FIELD',
-        "lat"             DOUBLE PRECISION                    NULL,
-        "lon"             DOUBLE PRECISION                    NULL,
-        "setup_status"    "farms_setup_status_enum"  NOT NULL DEFAULT 'PENDING',
-        "soil_type"       "farms_soil_type_enum"              NULL,
-        "crop_density"    DOUBLE PRECISION                    NULL,
-        "iot_device_ids"  CHARACTER VARYING                   NULL,
-        "setup_photo_url" CHARACTER VARYING                   NULL,
-        "setup_photo_lat" DOUBLE PRECISION                    NULL,
-        "setup_photo_lon" DOUBLE PRECISION                    NULL,
-        "createdAt"       TIMESTAMP                  NOT NULL DEFAULT now(),
-        "updatedAt"       TIMESTAMP                  NOT NULL DEFAULT now(),
-        "farmerId"        UUID                                NULL,
+        "id"              UUID                          NOT NULL DEFAULT uuid_generate_v4(),
+        "name"            CHARACTER VARYING             NOT NULL,
+        "crop_type"       "farms_crop_type_enum"        NOT NULL DEFAULT 'MAIZE',
+        "variety"         CHARACTER VARYING                      NULL,
+        "farm_size"       DOUBLE PRECISION              NOT NULL,
+        "size_unit"       "farms_size_unit_enum"        NOT NULL DEFAULT 'HECTARES',
+        "farm_type"       "farms_farm_type_enum"        NOT NULL DEFAULT 'FIELD',
+        "lat"             DOUBLE PRECISION                       NULL,
+        "lon"             DOUBLE PRECISION                       NULL,
+        "setup_status"    "farms_setup_status_enum"     NOT NULL DEFAULT 'PENDING',
+        "soil_type"       "farms_soil_type_enum"                 NULL,
+        "crop_density"    DOUBLE PRECISION                       NULL,
+        "iot_device_ids"  CHARACTER VARYING                      NULL,
+        "setup_photo_url" CHARACTER VARYING                      NULL,
+        "setup_photo_lat" DOUBLE PRECISION                       NULL,
+        "setup_photo_lon" DOUBLE PRECISION                       NULL,
+        "growth_stage"    "farms_growth_stage_enum"              NULL,
+        "elevation_m"     DOUBLE PRECISION                       NULL,
+        "days_to_maturity" INTEGER                               NULL,
+        "createdAt"       TIMESTAMP                     NOT NULL DEFAULT now(),
+        "updatedAt"       TIMESTAMP                     NOT NULL DEFAULT now(),
+        "farmerId"        UUID                                   NULL,
         CONSTRAINT "PK_farms" PRIMARY KEY ("id"),
         CONSTRAINT "FK_farms_farmer"
           FOREIGN KEY ("farmerId") REFERENCES "farmers"("id")
@@ -140,15 +153,37 @@ export class InitialSchema1748700000000 implements MigrationInterface {
         "is_active"       BOOLEAN                         NOT NULL DEFAULT false,
         "registered_at"   TIMESTAMP                       NOT NULL DEFAULT now(),
         "thing_name"      CHARACTER VARYING                        NULL,
+        "thing_arn"       CHARACTER VARYING                        NULL,
         "certificate_id"  CHARACTER VARYING                        NULL,
         "certificate_arn" CHARACTER VARYING                        NULL,
         "certificate_pem" TEXT                                     NULL,
         "private_key"     TEXT                                     NULL,
         "public_key"      TEXT                                     NULL,
+        "lat"             DOUBLE PRECISION                         NULL,
+        "lon"             DOUBLE PRECISION                         NULL,
+        "status"          "iot_devices_status_enum"                NOT NULL DEFAULT 'INACTIVE',
         "farmId"          UUID                                     NULL,
         CONSTRAINT "PK_iot_devices" PRIMARY KEY ("id"),
         CONSTRAINT "FK_iot_devices_farm"
           FOREIGN KEY ("farmId") REFERENCES "farms"("id") ON DELETE CASCADE
+      )
+    `);
+
+    // --- iot_tool_calls ---
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS "iot_tool_calls" (
+        "id"           UUID                          NOT NULL DEFAULT uuid_generate_v4(),
+        "command_type" "iot_command_type_enum"       NOT NULL,
+        "parameters"   JSONB                                  NULL,
+        "status"       "iot_tool_call_status_enum"   NOT NULL DEFAULT 'PENDING',
+        "response"     JSONB                                  NULL,
+        "requested_by" CHARACTER VARYING             NOT NULL,
+        "iotDeviceId"  UUID                                   NULL,
+        "createdAt"    TIMESTAMP                     NOT NULL DEFAULT now(),
+        "updatedAt"    TIMESTAMP                     NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_iot_tool_calls" PRIMARY KEY ("id"),
+        CONSTRAINT "FK_iot_tool_calls_iot_device"
+          FOREIGN KEY ("iotDeviceId") REFERENCES "iot_devices"("id") ON DELETE CASCADE
       )
     `);
 
@@ -170,15 +205,15 @@ export class InitialSchema1748700000000 implements MigrationInterface {
     // --- image_datas ---
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "image_datas" (
-        "id"                  UUID             NOT NULL DEFAULT uuid_generate_v4(),
-        "url"                 CHARACTER VARYING NOT NULL,
-        "lat"                 DOUBLE PRECISION  NOT NULL,
-        "lon"                 DOUBLE PRECISION  NOT NULL,
-        "prediction_types"    CHARACTER VARYING NOT NULL DEFAULT 'DISEASE_PREDICTION',
-        "createdAt"           TIMESTAMP         NOT NULL DEFAULT now(),
-        "updatedAt"           TIMESTAMP         NOT NULL DEFAULT now(),
-        "farmId"              UUID                       NULL,
-        "predictionRangeId"   UUID                       NULL,
+        "id"                UUID              NOT NULL DEFAULT uuid_generate_v4(),
+        "url"               CHARACTER VARYING NOT NULL,
+        "lat"               DOUBLE PRECISION  NOT NULL,
+        "lon"               DOUBLE PRECISION  NOT NULL,
+        "prediction_types"  CHARACTER VARYING NOT NULL DEFAULT 'DISEASE_PREDICTION',
+        "createdAt"         TIMESTAMP         NOT NULL DEFAULT now(),
+        "updatedAt"         TIMESTAMP         NOT NULL DEFAULT now(),
+        "farmId"            UUID                       NULL,
+        "predictionRangeId" UUID                       NULL,
         CONSTRAINT "PK_image_datas" PRIMARY KEY ("id"),
         CONSTRAINT "FK_image_datas_farm"
           FOREIGN KEY ("farmId") REFERENCES "farms"("id") ON DELETE CASCADE,
@@ -209,16 +244,16 @@ export class InitialSchema1748700000000 implements MigrationInterface {
     // --- farm_health ---
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "farm_health" (
-        "id"            UUID             NOT NULL DEFAULT uuid_generate_v4(),
-        "overall_score" DOUBLE PRECISION NOT NULL DEFAULT 0,
-        "soil_health"   DOUBLE PRECISION NOT NULL DEFAULT 0,
-        "crop_health"   DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "id"             UUID             NOT NULL DEFAULT uuid_generate_v4(),
+        "overall_score"  DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "soil_health"    DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "crop_health"    DOUBLE PRECISION NOT NULL DEFAULT 0,
         "weather_stress" DOUBLE PRECISION NOT NULL DEFAULT 0,
-        "disease_risk"  DOUBLE PRECISION NOT NULL DEFAULT 0,
-        "computed_at"   TIMESTAMPTZ               NULL,
-        "createdAt"     TIMESTAMP        NOT NULL DEFAULT now(),
-        "updatedAt"     TIMESTAMP        NOT NULL DEFAULT now(),
-        "farmId"        UUID                       NULL,
+        "disease_risk"   DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "computed_at"    TIMESTAMPTZ               NULL,
+        "createdAt"      TIMESTAMP        NOT NULL DEFAULT now(),
+        "updatedAt"      TIMESTAMP        NOT NULL DEFAULT now(),
+        "farmId"         UUID                       NULL,
         CONSTRAINT "PK_farm_health" PRIMARY KEY ("id"),
         CONSTRAINT "FK_farm_health_farm"
           FOREIGN KEY ("farmId") REFERENCES "farms"("id") ON DELETE CASCADE
@@ -228,18 +263,18 @@ export class InitialSchema1748700000000 implements MigrationInterface {
     // --- crop_field_health ---
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "crop_field_health" (
-        "id"                 UUID                                    NOT NULL DEFAULT uuid_generate_v4(),
-        "field_name"         CHARACTER VARYING                       NOT NULL,
-        "crop_type"          "crop_field_health_crop_type_enum"      NOT NULL DEFAULT 'MAIZE',
-        "health_percent"     DOUBLE PRECISION                        NOT NULL DEFAULT 0,
-        "ndvi"               DOUBLE PRECISION                        NOT NULL DEFAULT 0,
-        "disease_probability" DOUBLE PRECISION                       NOT NULL DEFAULT 0,
-        "disease_type"       CHARACTER VARYING                                NULL,
-        "growth_stage"       "crop_field_health_growth_stage_enum"   NOT NULL DEFAULT 'VEGETATIVE',
-        "expected_harvest"   CHARACTER VARYING                       NOT NULL,
-        "createdAt"          TIMESTAMP                               NOT NULL DEFAULT now(),
-        "updatedAt"          TIMESTAMP                               NOT NULL DEFAULT now(),
-        "farmHealthId"       UUID                                             NULL,
+        "id"                   UUID                                  NOT NULL DEFAULT uuid_generate_v4(),
+        "field_name"           CHARACTER VARYING                     NOT NULL,
+        "crop_type"            "crop_field_health_crop_type_enum"    NOT NULL DEFAULT 'MAIZE',
+        "health_percent"       DOUBLE PRECISION                      NOT NULL DEFAULT 0,
+        "ndvi"                 DOUBLE PRECISION                      NOT NULL DEFAULT 0,
+        "disease_probability"  DOUBLE PRECISION                      NOT NULL DEFAULT 0,
+        "disease_type"         CHARACTER VARYING                              NULL,
+        "growth_stage"         "crop_field_health_growth_stage_enum" NOT NULL DEFAULT 'VEGETATIVE',
+        "expected_harvest"     CHARACTER VARYING                     NOT NULL,
+        "createdAt"            TIMESTAMP                             NOT NULL DEFAULT now(),
+        "updatedAt"            TIMESTAMP                             NOT NULL DEFAULT now(),
+        "farmHealthId"         UUID                                           NULL,
         CONSTRAINT "PK_crop_field_health" PRIMARY KEY ("id"),
         CONSTRAINT "FK_crop_field_health_farm_health"
           FOREIGN KEY ("farmHealthId") REFERENCES "farm_health"("id") ON DELETE CASCADE
@@ -268,15 +303,15 @@ export class InitialSchema1748700000000 implements MigrationInterface {
     // --- health_alerts ---
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "health_alerts" (
-        "id"               UUID                             NOT NULL DEFAULT uuid_generate_v4(),
-        "severity"         "health_alerts_severity_enum"    NOT NULL DEFAULT 'INFO',
-        "title"            CHARACTER VARYING                NOT NULL,
-        "description"      TEXT                             NOT NULL,
-        "action"           TEXT                             NOT NULL,
-        "estimated_impact" CHARACTER VARYING                NOT NULL,
-        "createdAt"        TIMESTAMP                        NOT NULL DEFAULT now(),
-        "updatedAt"        TIMESTAMP                        NOT NULL DEFAULT now(),
-        "farmHealthId"     UUID                                      NULL,
+        "id"               UUID                          NOT NULL DEFAULT uuid_generate_v4(),
+        "severity"         "health_alerts_severity_enum" NOT NULL DEFAULT 'INFO',
+        "title"            CHARACTER VARYING             NOT NULL,
+        "description"      TEXT                          NOT NULL,
+        "action"           TEXT                          NOT NULL,
+        "estimated_impact" CHARACTER VARYING             NOT NULL,
+        "createdAt"        TIMESTAMP                     NOT NULL DEFAULT now(),
+        "updatedAt"        TIMESTAMP                     NOT NULL DEFAULT now(),
+        "farmHealthId"     UUID                                   NULL,
         CONSTRAINT "PK_health_alerts" PRIMARY KEY ("id"),
         CONSTRAINT "FK_health_alerts_farm_health"
           FOREIGN KEY ("farmHealthId") REFERENCES "farm_health"("id") ON DELETE CASCADE
@@ -305,24 +340,153 @@ export class InitialSchema1748700000000 implements MigrationInterface {
     // --- yield_comparisons ---
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "yield_comparisons" (
-        "id"                  UUID              NOT NULL DEFAULT uuid_generate_v4(),
-        "field_name"          CHARACTER VARYING NOT NULL,
-        "current_yield"       DOUBLE PRECISION  NOT NULL DEFAULT 0,
-        "last_season_yield"   DOUBLE PRECISION  NOT NULL DEFAULT 0,
-        "confidence_min"      DOUBLE PRECISION  NOT NULL DEFAULT 0,
-        "confidence_max"      DOUBLE PRECISION  NOT NULL DEFAULT 0,
-        "revenue"             DOUBLE PRECISION  NOT NULL DEFAULT 0,
-        "createdAt"           TIMESTAMP         NOT NULL DEFAULT now(),
-        "updatedAt"           TIMESTAMP         NOT NULL DEFAULT now(),
-        "farmHealthId"        UUID                       NULL,
+        "id"                UUID              NOT NULL DEFAULT uuid_generate_v4(),
+        "field_name"        CHARACTER VARYING NOT NULL,
+        "current_yield"     DOUBLE PRECISION  NOT NULL DEFAULT 0,
+        "last_season_yield" DOUBLE PRECISION  NOT NULL DEFAULT 0,
+        "confidence_min"    DOUBLE PRECISION  NOT NULL DEFAULT 0,
+        "confidence_max"    DOUBLE PRECISION  NOT NULL DEFAULT 0,
+        "revenue"           DOUBLE PRECISION  NOT NULL DEFAULT 0,
+        "createdAt"         TIMESTAMP         NOT NULL DEFAULT now(),
+        "updatedAt"         TIMESTAMP         NOT NULL DEFAULT now(),
+        "farmHealthId"      UUID                       NULL,
         CONSTRAINT "PK_yield_comparisons" PRIMARY KEY ("id"),
         CONSTRAINT "FK_yield_comparisons_farm_health"
           FOREIGN KEY ("farmHealthId") REFERENCES "farm_health"("id") ON DELETE CASCADE
       )
     `);
+
+    // --- chats ---
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS "chats" (
+        "id"        UUID              NOT NULL DEFAULT uuid_generate_v4(),
+        "status"    CHARACTER VARYING          NULL,
+        "title"     CHARACTER VARYING          NULL,
+        "farmerId"  UUID                       NULL,
+        "farmId"    UUID                       NULL,
+        "createdAt" TIMESTAMP         NOT NULL DEFAULT now(),
+        "updatedAt" TIMESTAMP         NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_chats" PRIMARY KEY ("id"),
+        CONSTRAINT "FK_chats_farmer"
+          FOREIGN KEY ("farmerId") REFERENCES "farmers"("id") ON DELETE CASCADE,
+        CONSTRAINT "FK_chats_farm"
+          FOREIGN KEY ("farmId")   REFERENCES "farms"("id")   ON DELETE CASCADE
+      )
+    `);
+
+    // --- chat_messages ---
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS "chat_messages" (
+        "id"          UUID                      NOT NULL DEFAULT uuid_generate_v4(),
+        "role"        "chat_messages_role_enum" NOT NULL,
+        "content"     TEXT                               NULL,
+        "raw_blocks"  JSONB                              NULL,
+        "is_complete" BOOLEAN                   NOT NULL DEFAULT false,
+        "chatId"      UUID                               NULL,
+        "createdAt"   TIMESTAMP                 NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_chat_messages" PRIMARY KEY ("id"),
+        CONSTRAINT "FK_chat_messages_chat"
+          FOREIGN KEY ("chatId") REFERENCES "chats"("id") ON DELETE CASCADE
+      )
+    `);
+
+    // --- farmer_settings ---
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS "farmer_settings" (
+        "id"                          UUID        NOT NULL DEFAULT uuid_generate_v4(),
+        "farmDataLookbackSeconds"     INTEGER     NOT NULL DEFAULT 3600,
+        "farmDataCacheTtlSeconds"     INTEGER     NOT NULL DEFAULT 3600,
+        "healthReportIntervalSeconds" INTEGER     NOT NULL DEFAULT 3600,
+        "predictionWeeklyLimit"       INTEGER     NOT NULL DEFAULT 3,
+        "createdAt"                   TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "updatedAt"                   TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "farmerId"                    UUID,
+        CONSTRAINT "PK_farmer_settings" PRIMARY KEY ("id"),
+        CONSTRAINT "UQ_farmer_settings_farmer" UNIQUE ("farmerId"),
+        CONSTRAINT "FK_farmer_settings_farmer"
+          FOREIGN KEY ("farmerId") REFERENCES "farmers"("id") ON DELETE CASCADE
+      )
+    `);
+
+    // --- subscription_plans ---
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS "subscription_plans" (
+        "id"                          UUID        NOT NULL DEFAULT gen_random_uuid(),
+        "name"                        VARCHAR     NOT NULL UNIQUE,
+        "displayName"                 VARCHAR     NOT NULL,
+        "priceAmount"                 INTEGER     NOT NULL DEFAULT 0,
+        "currency"                    VARCHAR     NOT NULL DEFAULT 'GHS',
+        "predictionWeeklyLimit"       INTEGER     NOT NULL DEFAULT 3,
+        "farmDataLookbackSeconds"     INTEGER     NOT NULL DEFAULT 3600,
+        "farmDataCacheTtlSeconds"     INTEGER     NOT NULL DEFAULT 3600,
+        "healthReportIntervalSeconds" INTEGER     NOT NULL DEFAULT 3600,
+        "maxFarms"                    INTEGER     NOT NULL DEFAULT 2,
+        "features"                    TEXT        NOT NULL DEFAULT '[]',
+        "durationDays"                INTEGER     NOT NULL DEFAULT 0,
+        "isActive"                    BOOLEAN     NOT NULL DEFAULT true,
+        "createdAt"                   TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "updatedAt"                   TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_subscription_plans" PRIMARY KEY ("id")
+      )
+    `);
+
+    // --- farmer_subscriptions ---
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS "farmer_subscriptions" (
+        "id"                       UUID        NOT NULL DEFAULT gen_random_uuid(),
+        "farmerId"                 UUID        NOT NULL,
+        "planId"                   UUID        NOT NULL,
+        "status"                   VARCHAR     NOT NULL DEFAULT 'active',
+        "currentPeriodStart"       TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "currentPeriodEnd"         TIMESTAMPTZ          NULL,
+        "paystackCustomerCode"     VARCHAR              NULL,
+        "paystackSubscriptionCode" VARCHAR              NULL,
+        "createdAt"                TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "updatedAt"                TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_farmer_subscriptions" PRIMARY KEY ("id"),
+        CONSTRAINT "FK_farmer_subscriptions_farmer"
+          FOREIGN KEY ("farmerId") REFERENCES "farmers"("id") ON DELETE CASCADE,
+        CONSTRAINT "FK_farmer_subscriptions_plan"
+          FOREIGN KEY ("planId") REFERENCES "subscription_plans"("id")
+      )
+    `);
+
+    await queryRunner.query(`
+      CREATE INDEX IF NOT EXISTS "idx_farmer_subscriptions_farmer_status"
+      ON "farmer_subscriptions" ("farmerId", "status")
+    `);
+
+    // --- payment_transactions ---
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS "payment_transactions" (
+        "id"                 UUID        NOT NULL DEFAULT gen_random_uuid(),
+        "farmerId"           UUID        NOT NULL,
+        "subscriptionId"     UUID                 NULL,
+        "planId"             UUID        NOT NULL,
+        "paystackReference"  VARCHAR     NOT NULL UNIQUE,
+        "paystackAccessCode" VARCHAR              NULL,
+        "amount"             INTEGER     NOT NULL,
+        "currency"           VARCHAR     NOT NULL DEFAULT 'GHS',
+        "status"             VARCHAR     NOT NULL DEFAULT 'pending',
+        "metadata"           TEXT                 NULL,
+        "createdAt"          TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "updatedAt"          TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_payment_transactions" PRIMARY KEY ("id"),
+        CONSTRAINT "FK_payment_transactions_farmer"
+          FOREIGN KEY ("farmerId") REFERENCES "farmers"("id") ON DELETE CASCADE,
+        CONSTRAINT "FK_payment_transactions_subscription"
+          FOREIGN KEY ("subscriptionId") REFERENCES "farmer_subscriptions"("id") ON DELETE SET NULL
+      )
+    `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`DROP TABLE IF EXISTS "payment_transactions"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "farmer_subscriptions"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "subscription_plans"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "farmer_settings"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "chat_messages"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "chats"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "yield_comparisons"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "sensor_history_points"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "health_alerts"`);
@@ -332,6 +496,7 @@ export class InitialSchema1748700000000 implements MigrationInterface {
     await queryRunner.query(`DROP TABLE IF EXISTS "predictions"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "image_datas"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "prediction_ranges"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "iot_tool_calls"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "iot_devices"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "coordinates"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "farms"`);
@@ -346,7 +511,12 @@ export class InitialSchema1748700000000 implements MigrationInterface {
       'crop_field_health_crop_type_enum',
       'predictions_risk_level_enum',
       'predictions_prediction_type_enum',
+      'chat_messages_role_enum',
+      'iot_tool_call_status_enum',
+      'iot_command_type_enum',
+      'iot_devices_status_enum',
       'iot_devices_device_type_enum',
+      'farms_growth_stage_enum',
       'farms_soil_type_enum',
       'farms_setup_status_enum',
       'farms_farm_type_enum',
