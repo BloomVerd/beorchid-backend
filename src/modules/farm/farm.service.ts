@@ -591,6 +591,7 @@ export class FarmService {
             Action: ['iot:Publish', 'iot:Receive', 'iot:PublishRetain'],
             Resource: [
               `arn:aws:iot:us-east-1:784608886729:topic/farms/${farmId}/${deviceId}/telemetry`,
+              `arn:aws:iot:us-east-1:784608886729:topic/farms/${farmId}/${deviceId}/jobs/status`,
               `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/*`,
             ],
           },

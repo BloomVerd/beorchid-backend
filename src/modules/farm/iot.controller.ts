@@ -104,7 +104,8 @@ export class IotController {
     try {
       await this.farmService.confirmIotDestination(confirmationToken);
       res.status(200).send(confirmationToken);
-    } catch {
+    } catch (err) {
+      console.log('CONFIRMATION_FAILED:', err);
       res.status(500).json({ message: 'Confirmation failed' });
     }
   }
