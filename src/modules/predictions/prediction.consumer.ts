@@ -191,12 +191,17 @@ export class PredictionConsumer extends WorkerHost {
     }
   }
 
-  private buildApiRequest(farm: Farm, images: ImageData[]): PredictionApiRequest {
+  private buildApiRequest(
+    farm: Farm,
+    images: ImageData[],
+  ): PredictionApiRequest {
     const areaPerSubplot = farm.farm_size / images.length;
     return {
       crop: farm.crop_type.charAt(0) + farm.crop_type.slice(1).toLowerCase(),
       soil_type: farm.soil_type?.toLowerCase() ?? 'loam',
-      growth_stage: farm.growth_stage ? GROWTH_STAGE_API_MAP[farm.growth_stage] : 'vegetative',
+      growth_stage: farm.growth_stage
+        ? GROWTH_STAGE_API_MAP[farm.growth_stage]
+        : 'vegetative',
       subplots: images.map((img) => ({
         image_url: img.url,
         latitude: img.lat,
@@ -209,7 +214,8 @@ export class PredictionConsumer extends WorkerHost {
         longitude: farm.lon ?? null,
         planting_density: farm.crop_density ?? null,
         elevation_m: farm.elevation_m ?? 0,
-        days_to_maturity: farm.days_to_maturity ?? CROP_DAYS_TO_MATURITY[farm.crop_type],
+        days_to_maturity:
+          farm.days_to_maturity ?? CROP_DAYS_TO_MATURITY[farm.crop_type],
       },
     };
   }
