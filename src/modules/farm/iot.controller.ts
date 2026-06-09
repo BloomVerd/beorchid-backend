@@ -114,8 +114,9 @@ export class IotController {
     @Headers('x-iot-secret') secret: string,
     @Body()
     body: {
-      jobId: string;
-      statusDetails?: Record<string, unknown>;
+      tool_call_id: string;
+      status: 'COMPLETED' | 'SUCCEEDED' | 'IN_PROGRESS' | 'FAILED';
+      response?: Record<string, unknown>;
     },
     @Res() res: any,
   ): Promise<void> {

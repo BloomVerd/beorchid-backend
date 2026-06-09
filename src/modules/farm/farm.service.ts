@@ -1184,8 +1184,9 @@ runSample()
 
   async handleIotWebhook(
     body: {
-      jobId: string;
-      statusDetails?: Record<string, unknown>;
+      tool_call_id: string;
+      status: 'COMPLETED' | 'SUCCEEDED' | 'IN_PROGRESS' | 'FAILED';
+      response?: Record<string, unknown>;
     },
     secret: string,
   ): Promise<IotToolCall & { farmId: string }> {
@@ -1195,13 +1196,19 @@ runSample()
     }
 
     const toolCall = await this.iotToolCallRepository.findOne({
-      where: { id: body.jobId },
+      where: { id: body.tool_call_id },
       relations: ['iot_device', 'iot_device.farm'],
     });
     if (!toolCall) throw new BadRequestException('IoT tool call not found');
 
-    toolCall.status = IotToolCallStatus.COMPLETED;
-    if (body.statusDetails) toolCall.response = body.statusDetails;
+    const mapped =
+      body.status === 'SUCCEEDED' || body.status === 'COMPLETED'
+        ? IotToolCallStatus.COMPLETED
+        : body.status === 'IN_PROGRESS'
+          ? IotToolCallStatus.IN_PROGRESS
+          : IotToolCallStatus.FAILED;
+    toolCall.status = mapped;
+    if (body.response) toolCall.response = body.response;
     await this.iotToolCallRepository.save(toolCall);
 
     return Object.assign(toolCall, { farmId: toolCall.iot_device.farm.id });
@@ -1241,7 +1248,7 @@ runSample()
         .createTopicRule({
           ruleName,
           topicRulePayload: {
-            sql: "SELECT * FROM '$aws/events/jobExecution/+/succeeded'",
+            sql: "SELECT topic(5) AS tool_call_id, status, statusDetails AS response FROM '$aws/things/+/jobs/+/update'",
             actions: [
               {
                 http: {
