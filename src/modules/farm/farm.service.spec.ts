@@ -1111,7 +1111,7 @@ describe('FarmService', () => {
         expect.objectContaining({
           ruleName: 'BeorchidIotJobUpdates',
           topicRulePayload: expect.objectContaining({
-            sql: expect.stringContaining('$aws/things/+/jobs/+/update'),
+            sql: expect.stringContaining('farms/+/+/jobs/status'),
             actions: expect.arrayContaining([
               expect.objectContaining({
                 http: expect.objectContaining({

@@ -416,6 +416,7 @@ export class FarmService {
               Action: ['iot:Publish', 'iot:Receive', 'iot:PublishRetain'],
               Resource: [
                 `arn:aws:iot:us-east-1:784608886729:topic/farms/${farmId}/${deviceId}/telemetry`,
+                `arn:aws:iot:us-east-1:784608886729:topic/farms/${farmId}/${deviceId}/jobs/status`,
                 `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/*`,
               ],
             },
@@ -854,14 +855,25 @@ async function handleJobExecution(
       payload: JSON.stringify({ status: "IN_PROGRESS" }),
       qos: mqtt5.QoS.AtLeastOnce,
     });
+    await client.publish({
+      topicName: \`farms/\${FARM_ID}/\${DEVICE_ID}/jobs/status\`,
+      payload: JSON.stringify({ tool_call_id: jobId, status: "IN_PROGRESS" }),
+      qos: mqtt5.QoS.AtLeastOnce,
+    });
 
     await executeCommand(jobDocument.command_type, jobDocument.parameters ?? {});
 
     await client.publish({
       topicName: \`$aws/things/\${THING_NAME}/jobs/\${jobId}/update\`,
+      payload: JSON.stringify({ status: "SUCCEEDED" }),
+      qos: mqtt5.QoS.AtLeastOnce,
+    });
+    await client.publish({
+      topicName: \`farms/\${FARM_ID}/\${DEVICE_ID}/jobs/status\`,
       payload: JSON.stringify({
+        tool_call_id: jobId,
         status: "SUCCEEDED",
-        statusDetails: { result: "ok" },
+        response: { result: "ok" },
       }),
       qos: mqtt5.QoS.AtLeastOnce,
     });
@@ -869,9 +881,15 @@ async function handleJobExecution(
   } catch (err) {
     await client.publish({
       topicName: \`$aws/things/\${THING_NAME}/jobs/\${jobId}/update\`,
+      payload: JSON.stringify({ status: "FAILED" }),
+      qos: mqtt5.QoS.AtLeastOnce,
+    });
+    await client.publish({
+      topicName: \`farms/\${FARM_ID}/\${DEVICE_ID}/jobs/status\`,
       payload: JSON.stringify({
+        tool_call_id: jobId,
         status: "FAILED",
-        statusDetails: { error: String(err) },
+        response: { error: String(err) },
       }),
       qos: mqtt5.QoS.AtLeastOnce,
     });
@@ -1248,7 +1266,7 @@ runSample()
         .createTopicRule({
           ruleName,
           topicRulePayload: {
-            sql: "SELECT topic(5) AS tool_call_id, status, statusDetails AS response FROM '$aws/things/+/jobs/+/update'",
+            sql: "SELECT tool_call_id, status, response FROM 'farms/+/+/jobs/status'",
             actions: [
               {
                 http: {
