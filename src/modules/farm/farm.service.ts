@@ -235,13 +235,19 @@ export class FarmService {
   private async dispatchSetupNotification(farm: Farm): Promise<void> {
     if (!farm.farmer) return;
 
-    const settings = await this.farmerSettingsService.getOrCreate(farm.farmer.id);
+    const settings = await this.farmerSettingsService.getOrCreate(
+      farm.farmer.id,
+    );
 
-    const notification = await this.notificationsService.create(farm.farmer.id, {
-      title: `${farm.name} setup is complete`,
-      message: 'Your farm is fully set up. Health monitoring and predictions are now active.',
-      type: NotificationType.FARM_SETUP_COMPLETE,
-    });
+    const notification = await this.notificationsService.create(
+      farm.farmer.id,
+      {
+        title: `${farm.name} setup is complete`,
+        message:
+          'Your farm is fully set up. Health monitoring and predictions are now active.',
+        type: NotificationType.FARM_SETUP_COMPLETE,
+      },
+    );
 
     if (settings.notifyInApp) {
       this.notificationsService.pushToStream(farm.farmer.id, notification);
@@ -668,7 +674,7 @@ if [ ! -d ./aws-iot-device-sdk-js-v2 ]; then
   # samples require their own install
   cd $CWD
   cp index.ts aws-iot-device-sdk-js-v2/samples/node/mqtt/mqtt5_x509/index.ts
-  cd samples/node/mqtt/mqtt5_x509
+  cd aws-iot-device-sdk-js-v2/samples/node/mqtt/mqtt5_x509
   npm install
   cd $CWD
 fi
