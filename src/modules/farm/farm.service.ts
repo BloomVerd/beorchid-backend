@@ -416,10 +416,7 @@ export class FarmService {
               Action: ['iot:Publish', 'iot:Receive', 'iot:PublishRetain'],
               Resource: [
                 `arn:aws:iot:us-east-1:784608886729:topic/farms/${farmId}/${deviceId}/telemetry`,
-                `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/*/update`,
-                `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/$next/get`,
-                `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/notify`,
-                `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/notify-next`,
+                `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/*`,
               ],
             },
             {
@@ -428,17 +425,12 @@ export class FarmService {
               Resource: [
                 `arn:aws:iot:us-east-1:784608886729:topicfilter/farms/${farmId}/${deviceId}/telemetry`,
                 `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/*`,
-                `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/notify-next`,
-                `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/notify`,
-                `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/$next/get/accepted`,
               ],
             },
             {
               Effect: 'Allow',
               Action: ['iot:Connect'],
               Resource: [
-                'arn:aws:iot:us-east-1:784608886729:client/sdk-java',
-                'arn:aws:iot:us-east-1:784608886729:client/basicPubSub',
                 'arn:aws:iot:us-east-1:784608886729:client/sdk-nodejs-*',
               ],
             },
@@ -598,10 +590,7 @@ export class FarmService {
             Action: ['iot:Publish', 'iot:Receive', 'iot:PublishRetain'],
             Resource: [
               `arn:aws:iot:us-east-1:784608886729:topic/farms/${farmId}/${deviceId}/telemetry`,
-              `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/*/update`,
-              `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/$next/get`,
-              `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/notify`,
-              `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/notify-next`,
+              `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/*`,
             ],
           },
           {
@@ -610,17 +599,12 @@ export class FarmService {
             Resource: [
               `arn:aws:iot:us-east-1:784608886729:topicfilter/farms/${farmId}/${deviceId}/telemetry`,
               `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/*`,
-              `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/notify-next`,
-              `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/notify`,
-              `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/$next/get/accepted`,
             ],
           },
           {
             Effect: 'Allow',
             Action: ['iot:Connect'],
             Resource: [
-              'arn:aws:iot:us-east-1:784608886729:client/sdk-java',
-              'arn:aws:iot:us-east-1:784608886729:client/basicPubSub',
               'arn:aws:iot:us-east-1:784608886729:client/sdk-nodejs-*',
             ],
           },
