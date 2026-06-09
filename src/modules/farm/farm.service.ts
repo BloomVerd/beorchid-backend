@@ -1243,25 +1243,30 @@ runSample()
       console.log('Deleted existing rule:', ruleName);
     } catch (_) {}
 
-    await iotClient
-      .createTopicRule({
-        ruleName,
-        topicRulePayload: {
-          sql: "SELECT topic(5) AS tool_call_id, status, statusDetails AS response FROM '$aws/things/+/jobs/+/update/accepted'",
-          actions: [
-            {
-              http: {
-                url: webhookUrl,
-                confirmationUrl: confirmUrl,
-                headers,
+    try {
+      await iotClient
+        .createTopicRule({
+          ruleName,
+          topicRulePayload: {
+            sql: "SELECT topic(5) AS tool_call_id, status, statusDetails AS response FROM '$aws/things/+/jobs/+/update/accepted'",
+            actions: [
+              {
+                http: {
+                  url: webhookUrl,
+                  confirmationUrl: confirmUrl,
+                  headers,
+                },
               },
-            },
-          ],
-          awsIotSqlVersion: '2016-03-23',
-          ruleDisabled: false,
-        },
-      })
-      .promise();
+            ],
+            awsIotSqlVersion: '2016-03-23',
+            ruleDisabled: false,
+          },
+        })
+        .promise();
+    } catch (err: any) {
+      if (err?.code === 'ResourceAlreadyExistsException') return;
+      throw err;
+    }
 
     console.log('IoT rule created:', ruleName);
   }
