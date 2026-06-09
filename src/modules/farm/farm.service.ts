@@ -1228,7 +1228,6 @@ runSample()
 
     const appBaseUrl = this.configService.get<string>('APP_BASE_URL');
     const webhookSecret = this.configService.get<string>('IOT_WEBHOOK_SECRET');
-    console.log('appBaseUrl:', appBaseUrl);
     if (!appBaseUrl) return;
 
     const ruleName = 'BeorchidIotJobUpdates';
@@ -1238,30 +1237,33 @@ runSample()
       ? [{ key: 'x-iot-secret', value: webhookSecret }]
       : [];
 
+    // Force delete so AWS IoT retries the confirmation handshake
     try {
-      await iotClient
-        .createTopicRule({
-          ruleName,
-          topicRulePayload: {
-            sql: "SELECT topic(5) AS tool_call_id, status, statusDetails AS response FROM '$aws/things/+/jobs/+/update/accepted'",
-            actions: [
-              {
-                http: {
-                  url: webhookUrl,
-                  confirmationUrl: confirmUrl,
-                  headers,
-                },
+      await iotClient.deleteTopicRule({ ruleName }).promise();
+      console.log('Deleted existing rule:', ruleName);
+    } catch (_) {}
+
+    await iotClient
+      .createTopicRule({
+        ruleName,
+        topicRulePayload: {
+          sql: "SELECT topic(5) AS tool_call_id, status, statusDetails AS response FROM '$aws/things/+/jobs/+/update/accepted'",
+          actions: [
+            {
+              http: {
+                url: webhookUrl,
+                confirmationUrl: confirmUrl,
+                headers,
               },
-            ],
-            awsIotSqlVersion: '2016-03-23',
-            ruleDisabled: false,
-          },
-        })
-        .promise();
-    } catch (err: any) {
-      // Rule already exists — nothing to do
-      if (err?.code !== 'ResourceAlreadyExistsException') throw err;
-    }
+            },
+          ],
+          awsIotSqlVersion: '2016-03-23',
+          ruleDisabled: false,
+        },
+      })
+      .promise();
+
+    console.log('IoT rule created:', ruleName);
   }
 
   async deleteFarmImage(

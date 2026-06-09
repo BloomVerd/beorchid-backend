@@ -103,7 +103,7 @@ export class IotController {
   ): Promise<void> {
     try {
       await this.farmService.confirmIotDestination(confirmationToken);
-      res.status(200).json({ ok: true });
+      res.status(200).send(confirmationToken);
     } catch {
       res.status(500).json({ message: 'Confirmation failed' });
     }
