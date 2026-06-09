@@ -180,6 +180,7 @@ export class PredictionConsumer extends WorkerHost {
             lon: subplot.longitude,
             prediction_type: predType,
             risk_level: riskLevel,
+            description: this.buildDescription(predType, subplot, riskLevel),
           }),
         );
       }
@@ -240,5 +241,26 @@ export class PredictionConsumer extends WorkerHost {
     if (yieldData.water_stress_pct < 0.3) return RiskLevel.LOW;
     if (yieldData.water_stress_pct < 0.6) return RiskLevel.MODERATE;
     return RiskLevel.HIGH;
+  }
+
+  private buildDescription(
+    predType: PredictionType,
+    subplot: SubplotResult,
+    riskLevel: RiskLevel | undefined,
+  ): string {
+    if (predType === PredictionType.DISEASE_PREDICTION && subplot.disease) {
+      const { predicted_class, severity, confidence } = subplot.disease;
+      if (predicted_class === 'healthy') {
+        return `Healthy crop detected (confidence ${Math.round(confidence * 100)}%)`;
+      }
+      const label = predicted_class.replace(/_/g, ' ');
+      const titled = label.charAt(0).toUpperCase() + label.slice(1);
+      return `${titled} detected — severity ${Math.round(severity * 100)}%, confidence ${Math.round(confidence * 100)}%`;
+    }
+    if (predType === PredictionType.YIELD_PREDICTION && subplot.yield) {
+      const stressPct = Math.round(subplot.yield.water_stress_pct * 100);
+      return `Water stress at ${stressPct}% — ${riskLevel ?? 'unknown'} yield risk`;
+    }
+    return '';
   }
 }

@@ -60,3 +60,10 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 .claude
 
 *.pem
+
+# Terraform
+iac/.terraform/
+iac/.terraform.lock.hcl
+iac/terraform.tfstate
+iac/terraform.tfstate.backup
+iac/lambda/handler.zip

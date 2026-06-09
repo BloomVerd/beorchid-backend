@@ -43,6 +43,10 @@ export class Prediction {
   @Column({ type: 'enum', enum: RiskLevel, nullable: true })
   risk_level?: RiskLevel;
 
+  @Field({ nullable: true })
+  @Column({ type: 'text', nullable: true })
+  description?: string;
+
   @Field()
   @CreateDateColumn()
   createdAt: Date;
