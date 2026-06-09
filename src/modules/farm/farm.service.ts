@@ -418,6 +418,8 @@ export class FarmService {
                 `arn:aws:iot:us-east-1:784608886729:topic/farms/${farmId}/${deviceId}/telemetry`,
                 `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/*/update`,
                 `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/$next/get`,
+                `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/notify`,
+                `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/notify-next`,
               ],
             },
             {
@@ -427,6 +429,7 @@ export class FarmService {
                 `arn:aws:iot:us-east-1:784608886729:topicfilter/farms/${farmId}/${deviceId}/telemetry`,
                 `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/*`,
                 `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/notify-next`,
+                `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/notify`,
                 `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/$next/get/accepted`,
               ],
             },
@@ -597,6 +600,8 @@ export class FarmService {
               `arn:aws:iot:us-east-1:784608886729:topic/farms/${farmId}/${deviceId}/telemetry`,
               `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/*/update`,
               `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/$next/get`,
+              `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/notify`,
+              `arn:aws:iot:us-east-1:784608886729:topic/$aws/things/${thingName}/jobs/notify-next`,
             ],
           },
           {
@@ -606,6 +611,7 @@ export class FarmService {
               `arn:aws:iot:us-east-1:784608886729:topicfilter/farms/${farmId}/${deviceId}/telemetry`,
               `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/*`,
               `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/notify-next`,
+              `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/notify`,
               `arn:aws:iot:us-east-1:784608886729:topicfilter/$aws/things/${thingName}/jobs/$next/get/accepted`,
             ],
           },
@@ -1059,7 +1065,7 @@ runSample()
     input: TriggerIotDeviceInput,
   ): Promise<IotToolCall> {
     const whereClause: Record<string, unknown> = {
-      id: deviceId,
+      device_id: deviceId,
       farm: { id: farmId },
     };
     if (farmerId) {
