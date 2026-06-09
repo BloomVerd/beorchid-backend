@@ -15,6 +15,9 @@ import { IotPubSubService } from './iot-pubsub.service';
 import { JsonScalar } from './scalars/json.scalar';
 import { FarmerModule } from '../farmer/farmer.module';
 import { PaymentModule } from '../payment/payment.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { EmailModule } from '../email/email.module';
+import { SmsModule } from '../sms/sms.module';
 import { JwtStrategy } from 'src/common/strategies';
 
 @Module({
@@ -22,6 +25,9 @@ import { JwtStrategy } from 'src/common/strategies';
     ConfigModule,
     FarmerModule,
     PaymentModule,
+    NotificationsModule,
+    EmailModule,
+    SmsModule,
     TypeOrmModule.forFeature([
       Farm,
       Coordinate,

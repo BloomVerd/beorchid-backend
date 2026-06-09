@@ -38,7 +38,7 @@ export class InitialSchema1748700000000 implements MigrationInterface {
       ]],
       ['disease_alerts_spread_enum', ['INCREASING', 'STABLE', 'DECREASING']],
       ['health_alerts_severity_enum', ['INFO', 'WARNING', 'CRITICAL']],
-      ['notification_type_enum', ['PREDICTION_ALERT']],
+      ['notification_type_enum', ['PREDICTION_ALERT', 'HEALTH_ALERT', 'SUBSCRIPTION_ACTIVATED', 'FARM_SETUP_COMPLETE']],
     ];
 
     for (const [name, values] of enums) {

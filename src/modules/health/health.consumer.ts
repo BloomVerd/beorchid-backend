@@ -26,6 +26,10 @@ import { Prediction } from '../predictions/entities/prediction.entity';
 import { FarmerSettingsService } from '../farmer/farmer-settings.service';
 import { FarmService } from '../farm/farm.service';
 import { IotCommandType } from '../farm/entities/iot-tool-call.entity';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/entities/notification.entity';
+import { EmailProducer } from '../email/email.producer';
+import { SmsService } from '../sms/sms.service';
 
 interface HealthJson {
   overall_score: number;
@@ -114,6 +118,9 @@ export class HealthConsumer extends WorkerHost {
     private readonly predictionRepo: Repository<Prediction>,
     private readonly farmerSettingsService: FarmerSettingsService,
     private readonly farmService: FarmService,
+    private readonly notificationsService: NotificationsService,
+    private readonly emailProducer: EmailProducer,
+    private readonly smsService: SmsService,
   ) {
     super();
     this.llm = createLlmClient(this.configService);
@@ -364,6 +371,84 @@ export class HealthConsumer extends WorkerHost {
         })),
       );
     }
+
+    await this.dispatchHealthNotifications(
+      farm,
+      settings,
+      saved,
+      parsed.disease_alerts ?? [],
+      parsed.health_alerts ?? [],
+    );
+  }
+
+  private async dispatchHealthNotifications(
+    farm: Farm | null,
+    settings: Awaited<ReturnType<FarmerSettingsService['getOrCreate']>> | null,
+    health: FarmHealth,
+    diseaseAlerts: HealthJson['disease_alerts'],
+    healthAlerts: HealthJson['health_alerts'],
+  ): Promise<void> {
+    if (!farm?.farmer || !settings) return;
+
+    const actionableHealthAlerts = (healthAlerts ?? []).filter(
+      (a) =>
+        a.severity === AlertSeverity.CRITICAL || a.severity === 'WARNING',
+    );
+    const hasDisease = (diseaseAlerts ?? []).length > 0;
+
+    if (!actionableHealthAlerts.length && !hasDisease) return;
+
+    const summary = this.buildHealthSummary(health, diseaseAlerts ?? [], healthAlerts ?? []);
+
+    const notification = await this.notificationsService.create(
+      farm.farmer.id,
+      {
+        title: `Health alert for ${farm.name}`,
+        message: summary,
+        type: NotificationType.HEALTH_ALERT,
+      },
+    );
+
+    if (settings.notifyInApp) {
+      this.notificationsService.pushToStream(farm.farmer.id, notification);
+    }
+
+    if (settings.notifyEmail) {
+      await this.emailProducer.sendHealthAlert({
+        email: farm.farmer.email,
+        firstName: farm.farmer.firstName,
+        farmName: farm.name,
+        summary,
+      });
+    }
+
+    if (settings.notifySms && settings.smsPhoneNumber) {
+      await this.smsService.sendHealthAlert(
+        settings.smsPhoneNumber,
+        farm.name,
+        summary,
+      );
+    }
+  }
+
+  private buildHealthSummary(
+    health: FarmHealth,
+    diseaseAlerts: NonNullable<HealthJson['disease_alerts']>,
+    healthAlerts: NonNullable<HealthJson['health_alerts']>,
+  ): string {
+    const parts: string[] = [
+      `Overall health: ${Math.round(health.overall_score)}/100.`,
+    ];
+    const critical = healthAlerts.filter((a) => a.severity === AlertSeverity.CRITICAL);
+    const warning = healthAlerts.filter((a) => a.severity === 'WARNING');
+    if (critical.length) parts.push(`${critical.length} critical alert(s).`);
+    if (warning.length) parts.push(`${warning.length} warning(s).`);
+    if (diseaseAlerts.length) {
+      parts.push(
+        `Disease detected: ${diseaseAlerts.map((d) => d.disease_name).join(', ')}.`,
+      );
+    }
+    return parts.join(' ');
   }
 
   private async queryTelemetry(

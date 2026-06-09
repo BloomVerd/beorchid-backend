@@ -26,4 +26,30 @@ export class EmailProducer {
   }) {
     await this.emailQueue.add('prediction-alert', data);
   }
+
+  async sendHealthAlert(data: {
+    email: string;
+    firstName: string;
+    farmName: string;
+    summary: string;
+  }) {
+    await this.emailQueue.add('health-alert', data);
+  }
+
+  async sendSubscriptionActivated(data: {
+    email: string;
+    firstName: string;
+    planName: string;
+    summary: string;
+  }) {
+    await this.emailQueue.add('subscription-activated', data);
+  }
+
+  async sendFarmSetupComplete(data: {
+    email: string;
+    firstName: string;
+    farmName: string;
+  }) {
+    await this.emailQueue.add('farm-setup-complete', data);
+  }
 }

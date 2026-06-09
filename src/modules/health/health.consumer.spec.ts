@@ -15,6 +15,9 @@ import { YieldComparison } from './entities/yield-comparison.entity';
 import { Prediction } from '../predictions/entities/prediction.entity';
 import { FarmerSettingsService } from '../farmer/farmer-settings.service';
 import { FarmService } from '../farm/farm.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { EmailProducer } from '../email/email.producer';
+import { SmsService } from '../sms/sms.service';
 
 const makeJob = (data: object, name = 'compute-health-batch') => ({ name, data });
 
@@ -101,6 +104,9 @@ describe('HealthConsumer', () => {
   let predictionRepo: { find: jest.Mock };
   let farmerSettingsService: { getOrCreate: jest.Mock };
   let farmService: { triggerIotDevice: jest.Mock };
+  let notificationsService: { create: jest.Mock; pushToStream: jest.Mock };
+  let emailProducer: { sendHealthAlert: jest.Mock };
+  let smsService: { sendHealthAlert: jest.Mock };
   let llmCreate: jest.Mock;
   let dynamodbSend: jest.Mock;
 
@@ -142,6 +148,12 @@ describe('HealthConsumer', () => {
     farmService = {
       triggerIotDevice: jest.fn().mockResolvedValue({ id: 'tool-call-1', status: 'PENDING' }),
     };
+    notificationsService = {
+      create: jest.fn().mockResolvedValue({ id: 'notif-1' }),
+      pushToStream: jest.fn(),
+    };
+    emailProducer = { sendHealthAlert: jest.fn().mockResolvedValue(undefined) };
+    smsService = { sendHealthAlert: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -158,6 +170,9 @@ describe('HealthConsumer', () => {
         { provide: getRepositoryToken(Prediction), useValue: predictionRepo },
         { provide: FarmerSettingsService, useValue: farmerSettingsService },
         { provide: FarmService, useValue: farmService },
+        { provide: NotificationsService, useValue: notificationsService },
+        { provide: EmailProducer, useValue: emailProducer },
+        { provide: SmsService, useValue: smsService },
       ],
     }).compile();
 

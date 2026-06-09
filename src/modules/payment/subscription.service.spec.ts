@@ -18,6 +18,9 @@ import { SubscriptionPlanService } from './subscription-plan.service';
 import { PaymentService } from './payment.service';
 import { FarmerSettingsService } from '../farmer/farmer-settings.service';
 import { FarmerSettings } from '../farmer/entities/farmer-settings.entity';
+import { NotificationsService } from '../notifications/notifications.service';
+import { EmailProducer } from '../email/email.producer';
+import { SmsService } from '../sms/sms.service';
 
 const makePlan = (
   name: PlanName,
@@ -101,7 +104,11 @@ describe('SubscriptionService', () => {
   };
   let settingsService: {
     update: jest.Mock;
+    getOrCreate: jest.Mock;
   };
+  let notificationsService: { create: jest.Mock; pushToStream: jest.Mock };
+  let emailProducer: { sendSubscriptionActivated: jest.Mock };
+  let smsService: { sendSubscriptionActivated: jest.Mock };
 
   beforeEach(async () => {
     subscriptionRepo = {
@@ -125,7 +132,16 @@ describe('SubscriptionService', () => {
     };
     settingsService = {
       update: jest.fn().mockResolvedValue({} as FarmerSettings),
+      getOrCreate: jest.fn().mockResolvedValue({
+        notifyInApp: true, notifyEmail: false, notifySms: false, smsPhoneNumber: null,
+      }),
     };
+    notificationsService = {
+      create: jest.fn().mockResolvedValue({ id: 'notif-1' }),
+      pushToStream: jest.fn(),
+    };
+    emailProducer = { sendSubscriptionActivated: jest.fn().mockResolvedValue(undefined) };
+    smsService = { sendSubscriptionActivated: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -141,6 +157,9 @@ describe('SubscriptionService', () => {
         { provide: SubscriptionPlanService, useValue: planService },
         { provide: PaymentService, useValue: paymentService },
         { provide: FarmerSettingsService, useValue: settingsService },
+        { provide: NotificationsService, useValue: notificationsService },
+        { provide: EmailProducer, useValue: emailProducer },
+        { provide: SmsService, useValue: smsService },
       ],
     }).compile();
 

@@ -31,6 +31,11 @@ import { PaginatedFarms, PaginatedImages } from './types/farm.types';
 import { PaginatedIotToolCalls } from './types/iot-tool-call.types';
 import { SubscriptionService } from '../payment/subscription.service';
 import { throwSubscriptionLimitError } from 'src/common/exceptions/subscription.exceptions';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/entities/notification.entity';
+import { EmailProducer } from '../email/email.producer';
+import { SmsService } from '../sms/sms.service';
+import { FarmerSettingsService } from '../farmer/farmer-settings.service';
 
 @Injectable()
 export class FarmService {
@@ -43,6 +48,10 @@ export class FarmService {
     private iotToolCallRepository: Repository<IotToolCall>,
     private configService: ConfigService,
     private subscriptionService: SubscriptionService,
+    private readonly notificationsService: NotificationsService,
+    private readonly emailProducer: EmailProducer,
+    private readonly smsService: SmsService,
+    private readonly farmerSettingsService: FarmerSettingsService,
   ) {}
 
   private buildIotClient(): AWS.Iot | null {
@@ -208,16 +217,50 @@ export class FarmService {
   }
 
   async completeSetup(farmerId: string, farmId: string): Promise<Farm> {
-    return this.farmRepository.manager.transaction(async (em) => {
-      const farm = await em.findOne(Farm, {
+    const farm = await this.farmRepository.manager.transaction(async (em) => {
+      const f = await em.findOne(Farm, {
         where: { id: farmId, farmer: { id: farmerId } },
-        relations: ['coordinates', 'farm_images'],
+        relations: ['coordinates', 'farm_images', 'farmer'],
       });
-      if (!farm) throw new BadRequestException('Farm not found');
+      if (!f) throw new BadRequestException('Farm not found');
 
-      farm.setup_status = SetupStatus.COMPLETE;
-      return em.save(farm);
+      f.setup_status = SetupStatus.COMPLETE;
+      return em.save(f);
     });
+
+    await this.dispatchSetupNotification(farm);
+    return farm;
+  }
+
+  private async dispatchSetupNotification(farm: Farm): Promise<void> {
+    if (!farm.farmer) return;
+
+    const settings = await this.farmerSettingsService.getOrCreate(farm.farmer.id);
+
+    const notification = await this.notificationsService.create(farm.farmer.id, {
+      title: `${farm.name} setup is complete`,
+      message: 'Your farm is fully set up. Health monitoring and predictions are now active.',
+      type: NotificationType.FARM_SETUP_COMPLETE,
+    });
+
+    if (settings.notifyInApp) {
+      this.notificationsService.pushToStream(farm.farmer.id, notification);
+    }
+
+    if (settings.notifyEmail) {
+      await this.emailProducer.sendFarmSetupComplete({
+        email: farm.farmer.email,
+        firstName: farm.farmer.firstName,
+        farmName: farm.name,
+      });
+    }
+
+    if (settings.notifySms && settings.smsPhoneNumber) {
+      await this.smsService.sendFarmSetupComplete(
+        settings.smsPhoneNumber,
+        farm.name,
+      );
+    }
   }
 
   async updateFarmCoordinateData(

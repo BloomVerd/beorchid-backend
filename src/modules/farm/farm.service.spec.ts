@@ -56,6 +56,10 @@ import { Coordinate } from './entities/coordinate.entity';
 import { PredictionRange } from '../predictions/entities/prediction-range.entity';
 import { SubscriptionService } from '../payment/subscription.service';
 import { PlanName } from '../payment/entities/subscription-plan.entity';
+import { NotificationsService } from '../notifications/notifications.service';
+import { EmailProducer } from '../email/email.producer';
+import { SmsService } from '../sms/sms.service';
+import { FarmerSettingsService } from '../farmer/farmer-settings.service';
 
 const makeFarmer = (overrides: Partial<Farmer> = {}): Farmer =>
   ({ id: 'farmer-id-1', email: 'farmer@example.com', firstName: 'John', ...overrides }) as Farmer;
@@ -137,6 +141,10 @@ describe('FarmService', () => {
   };
   let configService: { get: jest.Mock };
   let subscriptionService: { getActiveSubscription: jest.Mock };
+  let notificationsService: { create: jest.Mock; pushToStream: jest.Mock };
+  let emailProducer: { sendFarmSetupComplete: jest.Mock };
+  let smsService: { sendFarmSetupComplete: jest.Mock };
+  let farmerSettingsService: { getOrCreate: jest.Mock };
   let mockEm: {
     findOne: jest.Mock;
     count: jest.Mock;
@@ -203,6 +211,17 @@ describe('FarmService', () => {
         plan: { name: PlanName.POPULAR, displayName: 'Popular', maxFarms: 10 },
       }),
     };
+    notificationsService = {
+      create: jest.fn().mockResolvedValue({ id: 'notif-1' }),
+      pushToStream: jest.fn(),
+    };
+    emailProducer = { sendFarmSetupComplete: jest.fn().mockResolvedValue(undefined) };
+    smsService = { sendFarmSetupComplete: jest.fn().mockResolvedValue(undefined) };
+    farmerSettingsService = {
+      getOrCreate: jest.fn().mockResolvedValue({
+        notifyInApp: true, notifyEmail: false, notifySms: false, smsPhoneNumber: null,
+      }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -212,6 +231,10 @@ describe('FarmService', () => {
         { provide: getRepositoryToken(IotToolCall), useValue: iotToolCallRepo },
         { provide: ConfigService, useValue: configService },
         { provide: SubscriptionService, useValue: subscriptionService },
+        { provide: NotificationsService, useValue: notificationsService },
+        { provide: EmailProducer, useValue: emailProducer },
+        { provide: SmsService, useValue: smsService },
+        { provide: FarmerSettingsService, useValue: farmerSettingsService },
       ],
     }).compile();
 

@@ -23,14 +23,36 @@ export class SmsService {
     farmName: string,
     summary: string,
   ): Promise<void> {
+    await this.send(to, `[BeOrchid] ${farmName}: ${summary}`);
+  }
+
+  async sendHealthAlert(
+    to: string,
+    farmName: string,
+    summary: string,
+  ): Promise<void> {
+    await this.send(to, `[BeOrchid Health] ${farmName}: ${summary}`);
+  }
+
+  async sendSubscriptionActivated(
+    to: string,
+    planName: string,
+  ): Promise<void> {
+    await this.send(to, `[BeOrchid] Your ${planName} plan is now active.`);
+  }
+
+  async sendFarmSetupComplete(to: string, farmName: string): Promise<void> {
+    await this.send(
+      to,
+      `[BeOrchid] ${farmName} setup is complete. Health monitoring is now active.`,
+    );
+  }
+
+  private async send(to: string, body: string): Promise<void> {
     if (!this.client) {
       this.logger.warn('Twilio not configured — skipping SMS');
       return;
     }
-    await this.client.messages.create({
-      body: `[BeOrchid] ${farmName}: ${summary}`,
-      from: this.fromNumber,
-      to,
-    });
+    await this.client.messages.create({ body, from: this.fromNumber, to });
   }
 }

@@ -14,11 +14,18 @@ import {
   PaymentTransaction,
   TransactionStatus,
 } from './entities/payment-transaction.entity';
-import { PlanName, SubscriptionPlan } from './entities/subscription-plan.entity';
+import {
+  PlanName,
+  SubscriptionPlan,
+} from './entities/subscription-plan.entity';
 import { SubscriptionPlanService } from './subscription-plan.service';
 import { PaymentService } from './payment.service';
 import { FarmerSettingsService } from '../farmer/farmer-settings.service';
 import { Farmer } from '../farmer/entities/farmer.entity';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/entities/notification.entity';
+import { EmailProducer } from '../email/email.producer';
+import { SmsService } from '../sms/sms.service';
 
 const PLAN_HIERARCHY: Record<string, number> = {
   [PlanName.FREE]: 0,
@@ -36,6 +43,9 @@ export class SubscriptionService {
     private readonly planService: SubscriptionPlanService,
     private readonly paymentService: PaymentService,
     private readonly settingsService: FarmerSettingsService,
+    private readonly notificationsService: NotificationsService,
+    private readonly emailProducer: EmailProducer,
+    private readonly smsService: SmsService,
   ) {}
 
   async assignFreePlan(farmerId: string): Promise<FarmerSubscription> {
@@ -77,7 +87,9 @@ export class SubscriptionService {
       throw new NotFoundException('Subscription plan not found');
     }
     if (newPlan.name === PlanName.FREE) {
-      throw new BadRequestException('Cannot initiate payment for the free plan');
+      throw new BadRequestException(
+        'Cannot initiate payment for the free plan',
+      );
     }
 
     const currentSub = await this.subscriptionRepo.findOne({
@@ -169,7 +181,10 @@ export class SubscriptionService {
 
     // Expire existing active paid subscription
     await this.subscriptionRepo.update(
-      { farmer: { id: transaction.farmer.id }, status: SubscriptionStatus.ACTIVE },
+      {
+        farmer: { id: transaction.farmer.id },
+        status: SubscriptionStatus.ACTIVE,
+      },
       { status: SubscriptionStatus.EXPIRED },
     );
 
@@ -192,6 +207,7 @@ export class SubscriptionService {
     await this.transactionRepo.save(transaction);
 
     await this.syncSettings(transaction.farmer.id, plan);
+    await this.dispatchActivationNotification(transaction.farmer, plan);
   }
 
   getPlanHierarchy(planName: string): number {
@@ -202,12 +218,53 @@ export class SubscriptionService {
     farmerId: string,
     plan: SubscriptionPlan,
   ): Promise<void> {
+    const isPaid =
+      plan.name === PlanName.POPULAR || plan.name === PlanName.PREMIUM;
     await this.settingsService.update(farmerId, {
       predictionWeeklyLimit: plan.predictionWeeklyLimit,
       farmDataLookbackSeconds: plan.farmDataLookbackSeconds,
       farmDataCacheTtlSeconds: plan.farmDataCacheTtlSeconds,
       healthReportIntervalSeconds: plan.healthReportIntervalSeconds,
+      notifyEmail: isPaid,
+      notifySms: isPaid,
     });
+  }
+
+  private async dispatchActivationNotification(
+    farmer: Farmer,
+    plan: SubscriptionPlan,
+  ): Promise<void> {
+    const settings = await this.settingsService.getOrCreate(farmer.id);
+    const intervalHours = Math.round(plan.healthReportIntervalSeconds / 3600);
+    const summary =
+      `Your ${plan.displayName} plan is now active. ` +
+      `Enjoy ${plan.predictionWeeklyLimit} predictions/week and health reports every ${intervalHours} hour(s).`;
+
+    const notification = await this.notificationsService.create(farmer.id, {
+      title: 'Subscription activated',
+      message: summary,
+      type: NotificationType.SUBSCRIPTION_ACTIVATED,
+    });
+
+    if (settings.notifyInApp) {
+      this.notificationsService.pushToStream(farmer.id, notification);
+    }
+
+    if (settings.notifyEmail) {
+      await this.emailProducer.sendSubscriptionActivated({
+        email: farmer.email,
+        firstName: farmer.firstName,
+        planName: plan.displayName,
+        summary,
+      });
+    }
+
+    if (settings.notifySms && settings.smsPhoneNumber) {
+      await this.smsService.sendSubscriptionActivated(
+        settings.smsPhoneNumber,
+        plan.displayName,
+      );
+    }
   }
 
   private async activateImmediately(

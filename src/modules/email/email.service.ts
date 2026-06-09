@@ -53,12 +53,37 @@ export class EmailService {
     farmName: string,
     summary: string,
   ): Promise<void> {
-    const html = this.compileTemplate('prediction-alert', {
-      firstName,
-      farmName,
-      summary,
-    });
+    const html = this.compileTemplate('prediction-alert', { firstName, farmName, summary });
     await this.send(to, `Prediction Alert — ${farmName}`, html);
+  }
+
+  async sendHealthAlert(
+    to: string,
+    firstName: string,
+    farmName: string,
+    summary: string,
+  ): Promise<void> {
+    const html = this.compileTemplate('health-alert', { firstName, farmName, summary });
+    await this.send(to, `Health Alert — ${farmName}`, html);
+  }
+
+  async sendSubscriptionActivated(
+    to: string,
+    firstName: string,
+    planName: string,
+    summary: string,
+  ): Promise<void> {
+    const html = this.compileTemplate('subscription-activated', { firstName, planName, summary });
+    await this.send(to, `Your ${planName} plan is now active`, html);
+  }
+
+  async sendFarmSetupComplete(
+    to: string,
+    firstName: string,
+    farmName: string,
+  ): Promise<void> {
+    const html = this.compileTemplate('farm-setup-complete', { firstName, farmName });
+    await this.send(to, `${farmName} setup is complete`, html);
   }
 
   private compileTemplate(name: string, context: object): string {

@@ -26,10 +26,11 @@ See [`ai/docs/`](ai/docs/) for deeper technical and business documentation.
 - **Agentic IoT Control** — the LLM can autonomously trigger irrigation, image capture, and sensor activation based on field conditions
 - **Conversational AI Assistant** — multi-turn chat with 5 farm tools (health, predictions, devices, details, IoT commands), streamed token by token to the client
 - **Disease & Yield Predictions** — external computer vision service analyzes geotagged field photos and returns risk levels (LOW / MODERATE / HIGH)
-- **IoT Device Management** — AWS IoT Core integration for provisioning sensors, weather stations, drones, irrigation controllers with full X.509 certificate lifecycle
+- **IoT Device Management** — AWS IoT Core integration for provisioning sensors, weather stations, drones, irrigation controllers with full X.509 certificate lifecycle; each device stores optional GPS coordinates (`lat`/`lon`) used by the prediction pipeline
 - **Subscription Tiers** — Free / Popular / Premium plans enforced server-side, paid via Paystack
 - **Real-time Streaming** — Server-Sent Events (SSE) for live IoT events and AI chat token streams
 - **Cloud File Storage** — Cloudflare R2 (S3-compatible) with presigned upload URLs and CDN delivery
+- **Multi-Channel Notifications** — prediction alerts delivered via in-app SSE stream, email, and SMS (Twilio); each channel toggled per-farmer in settings
 
 ---
 
@@ -46,6 +47,7 @@ See [`ai/docs/`](ai/docs/) for deeper technical and business documentation.
 │  Auth · Farmer · Farm · Health         │
 │  Predictions · Chat · Payment          │
 │  Email · FarmData · Upload             │
+│  Notifications · SMS                   │
 └──────┬────────────────────────────────┘
        │ BullMQ Jobs
 ┌──────▼──────────────────────────────────────────┐
@@ -60,6 +62,7 @@ See [`ai/docs/`](ai/docs/) for deeper technical and business documentation.
 │  PostgreSQL 17   Redis    DynamoDB               │
 │  AWS IoT Core    Cloudflare R2                   │
 │  Ollama / LLM    Prediction ML Service           │
+│  Twilio (SMS)                                    │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -212,6 +215,16 @@ Copy `.env.example` to `.env` and supply values for your environment.
 | `EMAIL_FROM` | From address shown to recipients |
 | `EMAIL_HOST` | SMTP host (`smtp.gmail.com` in production, `smtp.ethereal.email` in dev) |
 
+### SMS (Twilio)
+
+| Variable | Description |
+|---|---|
+| `TWILIO_ACCOUNT_SID` | Twilio account SID (`ACxxx…`) |
+| `TWILIO_AUTH_TOKEN` | Twilio auth token |
+| `TWILIO_FROM_NUMBER` | Twilio phone number to send from (E.164 format, e.g. `+1234567890`) |
+
+All three are optional — if omitted, SMS notifications are silently skipped.
+
 ### Ollama / LLM
 
 | Variable | Default | Description |
@@ -274,6 +287,36 @@ npm run migration:revert
 ```
 
 Migration files live in `src/database/migrations/`.
+
+---
+
+## Infrastructure as Code
+
+The `iac/` directory contains a **Terraform** configuration that provisions the full AWS deployment stack:
+
+| Resource | Details |
+|---|---|
+| VPC | Public + private subnets, NAT gateway, internet gateway |
+| App EC2 (`t3.medium`) | Runs the backend via Docker Compose; public subnet |
+| Ollama EC2 (`g4dn.xlarge`) | GPU instance (NVIDIA T4) in private subnet for LLM inference |
+| DynamoDB | `farm_telemetry` table with TTL for IoT telemetry |
+| AWS IoT Core | Topic rule routing `farms/+/+/telemetry` → Lambda |
+| Lambda | Python 3.12 function writing IoT events to DynamoDB |
+| SSM Parameter Store | Stores the full `.env` file; fetched by EC2 at boot |
+| GitHub Secrets | Auto-updates `EC2_IP` and `OLLAMA_IP` after apply |
+
+### Deploy
+
+```bash
+cd iac
+terraform init
+terraform apply \
+  -var="public_key=$(cat ~/.ssh/id_rsa.pub)" \
+  -var="env_file_content=$(cat ../.env)" \
+  -var="github_repo=bloomverd/beorchid-backend"
+```
+
+Terraform state is stored in S3 (`beorchid-bucket`). Requires Terraform ≥ 1.6.0 and AWS CLI credentials with IoT Core, EC2, DynamoDB, Lambda, SSM, and IAM permissions.
 
 ---
 

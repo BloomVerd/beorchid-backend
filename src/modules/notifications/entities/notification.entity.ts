@@ -9,7 +9,10 @@ import { Field, ID, ObjectType, registerEnumType } from '@nestjs/graphql';
 import { Farmer } from '../../farmer/entities/farmer.entity';
 
 export enum NotificationType {
-  PREDICTION_ALERT = 'PREDICTION_ALERT',
+  PREDICTION_ALERT       = 'PREDICTION_ALERT',
+  HEALTH_ALERT           = 'HEALTH_ALERT',
+  SUBSCRIPTION_ACTIVATED = 'SUBSCRIPTION_ACTIVATED',
+  FARM_SETUP_COMPLETE    = 'FARM_SETUP_COMPLETE',
 }
 
 registerEnumType(NotificationType, { name: 'NotificationType' });

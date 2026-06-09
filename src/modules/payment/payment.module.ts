@@ -11,11 +11,17 @@ import { PaymentService } from './payment.service';
 import { PaymentController } from './payment.controller';
 import { SubscriptionResolver } from './subscription.resolver';
 import { FarmerModule } from '../farmer/farmer.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { EmailModule } from '../email/email.module';
+import { SmsModule } from '../sms/sms.module';
 
 @Module({
   imports: [
     ConfigModule,
     FarmerModule,
+    NotificationsModule,
+    EmailModule,
+    SmsModule,
     TypeOrmModule.forFeature([
       SubscriptionPlan,
       FarmerSubscription,

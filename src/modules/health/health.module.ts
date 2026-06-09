@@ -18,6 +18,9 @@ import { HealthScheduler } from './health.scheduler';
 import { HealthConsumer } from './health.consumer';
 import { FarmerModule } from '../farmer/farmer.module';
 import { FarmModule } from '../farm/farm.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { EmailModule } from '../email/email.module';
+import { SmsModule } from '../sms/sms.module';
 import { JwtStrategy } from 'src/common/strategies';
 
 @Module({
@@ -25,6 +28,9 @@ import { JwtStrategy } from 'src/common/strategies';
     ConfigModule,
     FarmerModule,
     FarmModule,
+    NotificationsModule,
+    EmailModule,
+    SmsModule,
     BullModule.registerQueue({ name: 'health-queue' }),
     TypeOrmModule.forFeature([
       FarmHealth,
