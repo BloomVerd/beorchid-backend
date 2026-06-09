@@ -695,8 +695,12 @@ const FARM_ID = "${farmId}";
 const DEVICE_ID = "${deviceId}";
 const THING_NAME = "${thingName}";
 
-const JOB_NOTIFY_TOPIC = "$aws/things/${thingName}/jobs/notify-next";
-const JOB_GET_ACCEPTED_TOPIC = "$aws/things/${thingName}/jobs/$next/get/accepted";
+const JOB_NOTIFY_TOPIC = \`$aws/things/\${THING_NAME}/jobs/notify\`;
+const JOB_NOTIFY_NEXT_TOPIC = \`$aws/things/\${THING_NAME}/jobs/notify-next\`;
+const JOB_GET_ACCEPTED_TOPIC_FILTER = \`$aws/things/\${THING_NAME}/jobs/+/get/accepted\`;
+const JOB_GET_NEXT_ACCEPTED_TOPIC = \`$aws/things/\${THING_NAME}/jobs/$next/get/accepted\`;
+const JOB_GET_ACCEPTED_PREFIX = \`$aws/things/\${THING_NAME}/jobs/\`;
+const JOB_GET_NEXT_TOPIC = \`$aws/things/\${THING_NAME}/jobs/$next/get\`;
 
 // --------------------------------- ARGUMENT PARSING -----------------------------------------
 const args = yargs
@@ -782,6 +786,44 @@ async function executeCommand(
   console.log(\`==== Command \${commandType} complete ====\\n\`);
 }
 
+async function handleJobNotify(
+  client: mqtt5.Mqtt5Client,
+  payloadStr: string,
+): Promise<void> {
+  let jobs: Record<string, Array<{ jobId: string }>> | undefined;
+  try {
+    const parsed = JSON.parse(payloadStr);
+    jobs = parsed.jobs;
+  } catch {
+    return;
+  }
+
+  const pending = [
+    ...(jobs?.["QUEUED"] ?? []),
+    ...(jobs?.["IN_PROGRESS"] ?? []),
+  ];
+
+  if (pending.length === 0) {
+    console.log("==== No pending jobs in notify ====\\n");
+    return;
+  }
+
+  console.log(\`==== \${pending.length} job(s) pending — requesting all ====\\n\`);
+  for (const { jobId } of pending) {
+    await client.publish({
+      topicName: \`$aws/things/\${THING_NAME}/jobs/\${jobId}/update\`,
+      payload: JSON.stringify({ status: "IN_PROGRESS" }),
+      qos: mqtt5.QoS.AtLeastOnce,
+    });
+
+    await client.publish({
+      topicName: \`$aws/things/\${THING_NAME}/jobs/\${jobId}/get\`,
+      payload: JSON.stringify({}),
+      qos: mqtt5.QoS.AtLeastOnce,
+    });
+  }
+}
+
 async function handleJobExecution(
   client: mqtt5.Mqtt5Client,
   payloadStr: string,
@@ -842,7 +884,6 @@ async function runSample() {
 
   let receivedCount = 0;
 
-  // Create MQTT5 client using mutual TLS via X509 Certificate and Private Key
   console.log("==== Creating MQTT5 Client ====\\n");
   const builder =
     iot.AwsIotMqtt5ClientConfigBuilder.newDirectMqttBuilderWithMtlsFromPath(
@@ -859,7 +900,6 @@ async function runSample() {
   const config = builder.build();
   const client = new mqtt5.Mqtt5Client(config);
 
-  // Event handler for when any message is received
   client.on(
     "messageReceived",
     async (eventData: mqtt5.MessageReceivedEvent) => {
@@ -867,14 +907,30 @@ async function runSample() {
       const payload = message.payload
         ? Buffer.from(message.payload).toString("utf-8")
         : "";
-      console.log(
-        \`==== Received message from topic '\${message.topicName}': \${payload} ====\\n\`,
-      );
+
+      if (message.topicName === JOB_NOTIFY_TOPIC) {
+        console.log(
+          \`==== Received message from topic '\${message.topicName}': \${payload} ====\\n\`,
+        );
+        await handleJobNotify(client, payload);
+        return;
+      }
+
+      if (message.topicName === JOB_NOTIFY_NEXT_TOPIC) {
+        console.log(
+          \`==== Received message from topic '\${message.topicName}': \${payload} ====\\n\`,
+        );
+        await handleJobExecution(client, payload);
+        return;
+      }
 
       if (
-        message.topicName === JOB_NOTIFY_TOPIC ||
-        message.topicName === JOB_GET_ACCEPTED_TOPIC
+        message.topicName.startsWith(JOB_GET_ACCEPTED_PREFIX) &&
+        message.topicName.endsWith("/get/accepted")
       ) {
+        console.log(
+          \`==== Received message from topic '\${message.topicName}': \${payload} ====\\n\`,
+        );
         await handleJobExecution(client, payload);
         return;
       }
@@ -886,33 +942,28 @@ async function runSample() {
     },
   );
 
-  // Event handler for lifecycle event Stopped
   client.on("stopped", () => {
     console.log("Lifecycle Stopped\\n");
   });
 
-  // Event handler for lifecycle event Attempting Connect
   client.on("attemptingConnect", () => {
     console.log(
       \`Lifecycle Connection Attempt\\nConnecting to endpoint: '\${args.endpoint}' with client ID '\${args.client_id}'\`,
     );
   });
 
-  // Event handler for lifecycle event Connection Success
   client.on("connectionSuccess", (eventData: mqtt5.ConnectionSuccessEvent) => {
     console.log(
       \`Lifecycle Connection Success with reason code: \${eventData.connack.reasonCode}\\n\`,
     );
   });
 
-  // Event handler for lifecycle event Connection Failure
   client.on("connectionFailure", (eventData: mqtt5.ConnectionFailureEvent) => {
     console.log(
       \`Lifecycle Connection Failure with exception: \${eventData.error}\`,
     );
   });
 
-  // Event handler for lifecycle event Disconnection
   client.on("disconnection", (eventData: mqtt5.DisconnectionEvent) => {
     const reasonCode = eventData.disconnect
       ? eventData.disconnect.reasonCode
@@ -946,14 +997,19 @@ async function runSample() {
   await client.subscribe({
     subscriptions: [
       { topicFilter: JOB_NOTIFY_TOPIC, qos: mqtt5.QoS.AtLeastOnce },
-      { topicFilter: JOB_GET_ACCEPTED_TOPIC, qos: mqtt5.QoS.AtLeastOnce },
+      { topicFilter: JOB_NOTIFY_NEXT_TOPIC, qos: mqtt5.QoS.AtLeastOnce },
+      {
+        topicFilter: JOB_GET_ACCEPTED_TOPIC_FILTER,
+        qos: mqtt5.QoS.AtLeastOnce,
+      },
+      { topicFilter: JOB_GET_NEXT_ACCEPTED_TOPIC, qos: mqtt5.QoS.AtLeastOnce },
     ],
   });
   console.log("==== Subscribed to IoT Jobs topics ====\\n");
 
   console.log("==== Requesting any pending jobs ====");
   await client.publish({
-    topicName: "$aws/things/${thingName}/jobs/$next/get",
+    topicName: JOB_GET_NEXT_TOPIC,
     payload: JSON.stringify({}),
     qos: mqtt5.QoS.AtLeastOnce,
   });
@@ -984,14 +1040,12 @@ async function runSample() {
       ts: now.getTime() / 1000,
     };
     const message = JSON.stringify(payload);
-    console.log(\`Publishing message to topic '\${args.topic}': \${message}\`);
 
-    const publishResult = await client.publish({
+    await client.publish({
       topicName: args.topic,
       payload: message,
       qos: mqtt5.QoS.AtLeastOnce,
     });
-    console.log(\`PubAck received with \${publishResult?.reasonCode}\\n\`);
 
     await new Promise<void>((resolve) => setTimeout(resolve, 1500));
     publishCount++;
@@ -1013,7 +1067,12 @@ async function runSample() {
   console.log(\`Unsubscribed with \${unsuback.reasonCodes}\\n\`);
 
   await client.unsubscribe({
-    topicFilters: [JOB_NOTIFY_TOPIC, JOB_GET_ACCEPTED_TOPIC],
+    topicFilters: [
+      JOB_NOTIFY_TOPIC,
+      JOB_NOTIFY_NEXT_TOPIC,
+      JOB_GET_ACCEPTED_TOPIC_FILTER,
+      JOB_GET_NEXT_ACCEPTED_TOPIC,
+    ],
   });
 
   console.log("==== Stopping Client ====");
