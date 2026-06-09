@@ -988,7 +988,7 @@ describe('FarmService', () => {
   });
 
   describe('handleIotWebhook', () => {
-    it('updates tool call to COMPLETED with response and returns farmId', async () => {
+    it('updates tool call to COMPLETED with statusDetails and returns farmId', async () => {
       const toolCall = makeToolCall({
         iot_device: makeDevice({ farm: { id: 'farm-id-1' } as any }),
       });
@@ -996,7 +996,7 @@ describe('FarmService', () => {
       iotToolCallRepo.save.mockImplementation(async (tc: any) => tc);
 
       const result = await service.handleIotWebhook(
-        { tool_call_id: 'tc-id-1', status: 'COMPLETED', response: { liters: 10 } },
+        { jobId: 'tc-id-1', statusDetails: { liters: 10 } },
         'test-webhook-secret',
       );
 
@@ -1005,7 +1005,7 @@ describe('FarmService', () => {
       expect(result.farmId).toBe('farm-id-1');
     });
 
-    it('maps SUCCEEDED (AWS Jobs status) to COMPLETED', async () => {
+    it('marks COMPLETED even when statusDetails is absent', async () => {
       const toolCall = makeToolCall({
         iot_device: makeDevice({ farm: { id: 'farm-id-1' } as any }),
       });
@@ -1013,47 +1013,17 @@ describe('FarmService', () => {
       iotToolCallRepo.save.mockImplementation(async (tc: any) => tc);
 
       const result = await service.handleIotWebhook(
-        { tool_call_id: 'tc-id-1', status: 'SUCCEEDED' },
+        { jobId: 'tc-id-1' },
         'test-webhook-secret',
       );
 
       expect(result.status).toBe(IotToolCallStatus.COMPLETED);
     });
 
-    it('updates tool call to IN_PROGRESS', async () => {
-      const toolCall = makeToolCall({
-        iot_device: makeDevice({ farm: { id: 'farm-id-1' } as any }),
-      });
-      iotToolCallRepo.findOne.mockResolvedValue(toolCall);
-      iotToolCallRepo.save.mockImplementation(async (tc: any) => tc);
-
-      const result = await service.handleIotWebhook(
-        { tool_call_id: 'tc-id-1', status: 'IN_PROGRESS' },
-        'test-webhook-secret',
-      );
-
-      expect(result.status).toBe(IotToolCallStatus.IN_PROGRESS);
-    });
-
-    it('updates tool call to FAILED', async () => {
-      const toolCall = makeToolCall({
-        iot_device: makeDevice({ farm: { id: 'farm-id-1' } as any }),
-      });
-      iotToolCallRepo.findOne.mockResolvedValue(toolCall);
-      iotToolCallRepo.save.mockImplementation(async (tc: any) => tc);
-
-      const result = await service.handleIotWebhook(
-        { tool_call_id: 'tc-id-1', status: 'FAILED' },
-        'test-webhook-secret',
-      );
-
-      expect(result.status).toBe(IotToolCallStatus.FAILED);
-    });
-
     it('throws UnauthorizedException when secret is wrong', async () => {
       await expect(
         service.handleIotWebhook(
-          { tool_call_id: 'tc-id-1', status: 'COMPLETED' },
+          { jobId: 'tc-id-1' },
           'wrong-secret',
         ),
       ).rejects.toThrow('Invalid webhook secret');
@@ -1064,7 +1034,7 @@ describe('FarmService', () => {
 
       await expect(
         service.handleIotWebhook(
-          { tool_call_id: 'missing-id', status: 'COMPLETED' },
+          { jobId: 'missing-id' },
           'test-webhook-secret',
         ),
       ).rejects.toThrow(new BadRequestException('IoT tool call not found'));
@@ -1082,7 +1052,7 @@ describe('FarmService', () => {
       iotToolCallRepo.save.mockImplementation(async (tc: any) => tc);
 
       const result = await service.handleIotWebhook(
-        { tool_call_id: 'tc-id-1', status: 'COMPLETED' },
+        { jobId: 'tc-id-1' },
         'any-secret-or-empty',
       );
 
@@ -1111,7 +1081,7 @@ describe('FarmService', () => {
         expect.objectContaining({
           ruleName: 'BeorchidIotJobUpdates',
           topicRulePayload: expect.objectContaining({
-            sql: expect.stringContaining('$aws/things/+/jobs/+/update/accepted'),
+            sql: expect.stringContaining('$aws/events/jobExecution/+/succeeded'),
             actions: expect.arrayContaining([
               expect.objectContaining({
                 http: expect.objectContaining({
