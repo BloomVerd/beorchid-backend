@@ -38,6 +38,7 @@ export class InitialSchema1748700000000 implements MigrationInterface {
       ]],
       ['disease_alerts_spread_enum', ['INCREASING', 'STABLE', 'DECREASING']],
       ['health_alerts_severity_enum', ['INFO', 'WARNING', 'CRITICAL']],
+      ['notification_type_enum', ['PREDICTION_ALERT']],
     ];
 
     for (const [name, values] of enums) {
@@ -230,6 +231,7 @@ export class InitialSchema1748700000000 implements MigrationInterface {
         "lon"             DOUBLE PRECISION                   NOT NULL,
         "prediction_type" "predictions_prediction_type_enum" NOT NULL,
         "risk_level"      "predictions_risk_level_enum"               NULL,
+        "description"     TEXT                                        NULL,
         "createdAt"       TIMESTAMP                          NOT NULL DEFAULT now(),
         "farmId"          UUID                                        NULL,
         "imageId"         UUID                                        NULL,
@@ -398,6 +400,10 @@ export class InitialSchema1748700000000 implements MigrationInterface {
         "farmDataCacheTtlSeconds"     INTEGER     NOT NULL DEFAULT 3600,
         "healthReportIntervalSeconds" INTEGER     NOT NULL DEFAULT 3600,
         "predictionWeeklyLimit"       INTEGER     NOT NULL DEFAULT 3,
+        "notifyInApp"                 BOOLEAN     NOT NULL DEFAULT true,
+        "notifyEmail"                 BOOLEAN     NOT NULL DEFAULT false,
+        "notifySms"                   BOOLEAN     NOT NULL DEFAULT false,
+        "smsPhoneNumber"              VARCHAR              NULL,
         "createdAt"                   TIMESTAMPTZ NOT NULL DEFAULT now(),
         "updatedAt"                   TIMESTAMPTZ NOT NULL DEFAULT now(),
         "farmerId"                    UUID,
@@ -406,6 +412,27 @@ export class InitialSchema1748700000000 implements MigrationInterface {
         CONSTRAINT "FK_farmer_settings_farmer"
           FOREIGN KEY ("farmerId") REFERENCES "farmers"("id") ON DELETE CASCADE
       )
+    `);
+
+    // --- notifications ---
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS "notifications" (
+        "id"        UUID                      NOT NULL DEFAULT uuid_generate_v4(),
+        "title"     CHARACTER VARYING         NOT NULL,
+        "message"   TEXT                      NOT NULL,
+        "type"      "notification_type_enum"  NOT NULL,
+        "isRead"    BOOLEAN                   NOT NULL DEFAULT false,
+        "createdAt" TIMESTAMP                 NOT NULL DEFAULT now(),
+        "farmerId"  UUID                               NULL,
+        CONSTRAINT "PK_notifications" PRIMARY KEY ("id"),
+        CONSTRAINT "FK_notifications_farmer"
+          FOREIGN KEY ("farmerId") REFERENCES "farmers"("id") ON DELETE CASCADE
+      )
+    `);
+
+    await queryRunner.query(`
+      CREATE INDEX IF NOT EXISTS "IDX_notifications_farmer"
+      ON "notifications" ("farmerId")
     `);
 
     // --- subscription_plans ---
@@ -484,6 +511,8 @@ export class InitialSchema1748700000000 implements MigrationInterface {
     await queryRunner.query(`DROP TABLE IF EXISTS "payment_transactions"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "farmer_subscriptions"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "subscription_plans"`);
+    await queryRunner.query(`DROP INDEX  IF EXISTS "IDX_notifications_farmer"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "notifications"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "farmer_settings"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "chat_messages"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "chats"`);
@@ -505,6 +534,7 @@ export class InitialSchema1748700000000 implements MigrationInterface {
     await queryRunner.query(`DROP TABLE IF EXISTS "farmers"`);
 
     const enums = [
+      'notification_type_enum',
       'health_alerts_severity_enum',
       'disease_alerts_spread_enum',
       'crop_field_health_growth_stage_enum',

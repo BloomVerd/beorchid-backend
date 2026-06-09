@@ -18,6 +18,8 @@ import { HealthModule } from './modules/health/health.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { FarmDataModule } from './modules/farm-data/farm-data.module';
 import { PaymentModule } from './modules/payment/payment.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { SmsModule } from './modules/sms/sms.module';
 
 @Module({
   imports: [
@@ -58,6 +60,8 @@ import { PaymentModule } from './modules/payment/payment.module';
     ChatModule,
     FarmDataModule,
     PaymentModule,
+    NotificationsModule,
+    SmsModule,
   ],
 })
 export class AppModule {}

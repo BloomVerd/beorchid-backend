@@ -1,5 +1,5 @@
 import { Field, InputType, Int } from '@nestjs/graphql';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 @InputType()
 export class UpdateFarmerSettingsInput {
@@ -30,4 +30,24 @@ export class UpdateFarmerSettingsInput {
   @Min(1)
   @Max(10)
   predictionWeeklyLimit?: number;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsBoolean()
+  notifyInApp?: boolean;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsBoolean()
+  notifyEmail?: boolean;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsBoolean()
+  notifySms?: boolean;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  smsPhoneNumber?: string;
 }

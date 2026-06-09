@@ -72,4 +72,22 @@ describe('EmailService', () => {
       );
     });
   });
+
+  describe('sendPredictionAlert', () => {
+    it('calls sendMail with prediction alert subject and recipient', async () => {
+      await service.sendPredictionAlert(
+        'farmer@example.com',
+        'John',
+        'Farm A',
+        '1 high-risk prediction(s) detected.',
+      );
+
+      expect(mockSendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'farmer@example.com',
+          subject: 'Prediction Alert — Farm A',
+        }),
+      );
+    });
+  });
 });

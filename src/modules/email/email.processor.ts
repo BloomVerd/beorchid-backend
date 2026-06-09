@@ -20,6 +20,16 @@ export class EmailProcessor extends WorkerHost {
         await this.emailService.sendWelcomeEmail(email, firstName);
         break;
       }
+      case 'prediction-alert': {
+        const { email, firstName, farmName, summary } = job.data;
+        await this.emailService.sendPredictionAlert(
+          email,
+          firstName,
+          farmName,
+          summary,
+        );
+        break;
+      }
     }
   }
 }

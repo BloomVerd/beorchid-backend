@@ -34,6 +34,22 @@ export class FarmerSettings {
   predictionWeeklyLimit: number;
 
   @Field()
+  @Column({ default: true })
+  notifyInApp: boolean;
+
+  @Field()
+  @Column({ default: false })
+  notifyEmail: boolean;
+
+  @Field()
+  @Column({ default: false })
+  notifySms: boolean;
+
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  smsPhoneNumber?: string;
+
+  @Field()
   @CreateDateColumn()
   createdAt: Date;
 

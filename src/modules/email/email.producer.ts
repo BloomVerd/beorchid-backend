@@ -17,4 +17,13 @@ export class EmailProducer {
   async sendWelcomeEmail(data: { email: string; firstName: string }) {
     await this.emailQueue.add('welcome-email', data);
   }
+
+  async sendPredictionAlert(data: {
+    email: string;
+    firstName: string;
+    farmName: string;
+    summary: string;
+  }) {
+    await this.emailQueue.add('prediction-alert', data);
+  }
 }

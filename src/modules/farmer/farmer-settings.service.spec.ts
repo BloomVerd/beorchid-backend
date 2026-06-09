@@ -10,6 +10,10 @@ const makeSettings = (overrides: Partial<FarmerSettings> = {}): FarmerSettings =
     farmDataCacheTtlSeconds: 3600,
     healthReportIntervalSeconds: 3600,
     predictionWeeklyLimit: 3,
+    notifyInApp: true,
+    notifyEmail: false,
+    notifySms: false,
+    smsPhoneNumber: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     farmer: { id: 'farmer-1' } as any,
@@ -126,6 +130,34 @@ describe('FarmerSettingsService', () => {
 
       expect(result.farmDataLookbackSeconds).toBe(2);
       expect(result.farmDataCacheTtlSeconds).toBe(7200);
+    });
+
+    it('updates notification channel flags and phone number', async () => {
+      const existing = makeSettings();
+      settingsRepo.findOne.mockResolvedValue(existing);
+      settingsRepo.create.mockReturnValue(existing);
+      settingsRepo.save.mockImplementation((s) => Promise.resolve(s));
+
+      const result = await service.update('farmer-1', {
+        notifyEmail: true,
+        notifySms: true,
+        smsPhoneNumber: '+233200000000',
+      });
+
+      expect(result.notifyEmail).toBe(true);
+      expect(result.notifySms).toBe(true);
+      expect(result.smsPhoneNumber).toBe('+233200000000');
+    });
+
+    it('preserves notifyInApp default when updating only other fields', async () => {
+      const existing = makeSettings({ notifyInApp: true });
+      settingsRepo.findOne.mockResolvedValue(existing);
+      settingsRepo.create.mockReturnValue(existing);
+      settingsRepo.save.mockImplementation((s) => Promise.resolve(s));
+
+      const result = await service.update('farmer-1', { notifyEmail: true });
+
+      expect(result.notifyInApp).toBe(true);
     });
   });
 });

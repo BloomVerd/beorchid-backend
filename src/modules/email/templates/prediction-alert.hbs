@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prediction Alert</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
+    .container { max-width: 560px; margin: 40px auto; background: #fff; border-radius: 8px; overflow: hidden; }
+    .header { background: #2d7a3a; padding: 24px 32px; }
+    .header h1 { color: #fff; margin: 0; font-size: 20px; }
+    .body { padding: 32px; color: #333; }
+    .body p { line-height: 1.6; margin: 0 0 16px; }
+    .summary-box { background: #f0f7f1; border-left: 4px solid #2d7a3a; padding: 16px; border-radius: 4px; margin: 24px 0; }
+    .footer { padding: 16px 32px; background: #f4f4f4; color: #999; font-size: 12px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>BeOrchid — Prediction Alert</h1>
+    </div>
+    <div class="body">
+      <p>Hi {{firstName}},</p>
+      <p>New prediction results are available for your farm <strong>{{farmName}}</strong>.</p>
+      <div class="summary-box">
+        <p style="margin:0;">{{summary}}</p>
+      </div>
+      <p>Log in to the BeOrchid dashboard to review the full prediction details and take any recommended actions.</p>
+    </div>
+    <div class="footer">
+      You are receiving this email because email notifications are enabled in your BeOrchid settings.
+    </div>
+  </div>
+</body>
+</html>

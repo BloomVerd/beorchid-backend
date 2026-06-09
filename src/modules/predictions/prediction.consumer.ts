@@ -9,6 +9,11 @@ import { PredictionRange } from './entities/prediction-range.entity';
 import { CropType, Farm } from '../farm/entities/farm.entity';
 import { ImageData, PredictionType } from '../farm/entities/image-data.entity';
 import { GrowthStage } from '../health/entities/health.enums';
+import { FarmerSettingsService } from '../farmer/farmer-settings.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/entities/notification.entity';
+import { EmailProducer } from '../email/email.producer';
+import { SmsService } from '../sms/sms.service';
 
 const GROWTH_STAGE_API_MAP: Record<GrowthStage, string> = {
   [GrowthStage.GERMINATION]: 'germination',
@@ -77,6 +82,10 @@ export class PredictionConsumer extends WorkerHost {
     private readonly configService: ConfigService,
     @InjectRepository(Prediction)
     private readonly predictionRepo: Repository<Prediction>,
+    private readonly farmerSettingsService: FarmerSettingsService,
+    private readonly notificationsService: NotificationsService,
+    private readonly emailProducer: EmailProducer,
+    private readonly smsService: SmsService,
   ) {
     super();
     this.predictionBaseUrl = this.configService.get<string>(
@@ -109,7 +118,7 @@ export class PredictionConsumer extends WorkerHost {
 
     const farm = await this.predictionRepo.manager.findOne(Farm, {
       where: { id: farmId },
-      relations: ['farm_images'],
+      relations: ['farm_images', 'farmer'],
     });
     if (!farm) {
       this.logger.warn(`Farm ${farmId} not found — skipping prediction`);
@@ -188,7 +197,62 @@ export class PredictionConsumer extends WorkerHost {
 
     if (records.length) {
       await this.predictionRepo.save(records);
+      await this.dispatchNotifications(farm, records);
     }
+  }
+
+  private async dispatchNotifications(
+    farm: Farm,
+    records: Prediction[],
+  ): Promise<void> {
+    if (!farm.farmer) return;
+
+    const settings = await this.farmerSettingsService.getOrCreate(
+      farm.farmer.id,
+    );
+    const summary = this.buildSummary(records);
+
+    const notification = await this.notificationsService.create(
+      farm.farmer.id,
+      {
+        title: `Prediction results for ${farm.name}`,
+        message: summary,
+        type: NotificationType.PREDICTION_ALERT,
+      },
+    );
+
+    if (settings.notifyInApp) {
+      this.notificationsService.pushToStream(farm.farmer.id, notification);
+    }
+
+    if (settings.notifyEmail) {
+      await this.emailProducer.sendPredictionAlert({
+        email: farm.farmer.email,
+        firstName: farm.farmer.firstName,
+        farmName: farm.name,
+        summary,
+      });
+    }
+
+    if (settings.notifySms && settings.smsPhoneNumber) {
+      await this.smsService.sendPredictionAlert(
+        settings.smsPhoneNumber,
+        farm.name,
+        summary,
+      );
+    }
+  }
+
+  private buildSummary(records: Prediction[]): string {
+    const high = records.filter((r) => r.risk_level === RiskLevel.HIGH).length;
+    const mod = records.filter(
+      (r) => r.risk_level === RiskLevel.MODERATE,
+    ).length;
+    if (!high && !mod) return 'All predictions look good — low risk detected.';
+    const parts: string[] = [];
+    if (high) parts.push(`${high} high-risk`);
+    if (mod) parts.push(`${mod} moderate-risk`);
+    return `${parts.join(', ')} prediction(s) detected.`;
   }
 
   private buildApiRequest(

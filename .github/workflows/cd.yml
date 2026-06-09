@@ -55,6 +55,9 @@ jobs:
           host: ${{ secrets.OLLAMA_IP }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          proxy_host: ${{ secrets.EC2_IP }}
+          proxy_username: ${{ secrets.EC2_USER }}
+          proxy_key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             mkdir -p ~/ollama
             sudo chown -R ${{ secrets.EC2_USER }}:${{ secrets.EC2_USER }} ~/ollama
@@ -75,6 +78,9 @@ jobs:
           host: ${{ secrets.OLLAMA_IP }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          proxy_host: ${{ secrets.EC2_IP }}
+          proxy_username: ${{ secrets.EC2_USER }}
+          proxy_key: ${{ secrets.EC2_SSH_KEY }}
           source: 'docker-compose.ollama.yml'
           target: '~/ollama'
           overwrite: true
@@ -173,6 +179,9 @@ jobs:
           host: ${{ secrets.OLLAMA_IP }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          proxy_host: ${{ secrets.EC2_IP }}
+          proxy_username: ${{ secrets.EC2_USER }}
+          proxy_key: ${{ secrets.EC2_SSH_KEY }}
           envs: COMPOSE_PROJECT_NAME
           script: |
             set -e

@@ -47,6 +47,20 @@ export class EmailService {
     await this.send(to, 'Welcome to BeOrchid!', html);
   }
 
+  async sendPredictionAlert(
+    to: string,
+    firstName: string,
+    farmName: string,
+    summary: string,
+  ): Promise<void> {
+    const html = this.compileTemplate('prediction-alert', {
+      firstName,
+      farmName,
+      summary,
+    });
+    await this.send(to, `Prediction Alert — ${farmName}`, html);
+  }
+
   private compileTemplate(name: string, context: object): string {
     const templatePath = path.join(__dirname, 'templates', `${name}.hbs`);
     const source = fs.readFileSync(templatePath, 'utf-8');

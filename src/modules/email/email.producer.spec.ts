@@ -40,4 +40,19 @@ describe('EmailProducer', () => {
       expect(mockQueue.add).toHaveBeenCalledWith('welcome-email', data);
     });
   });
+
+  describe('sendPredictionAlert', () => {
+    it('adds prediction-alert job to the queue with all fields', async () => {
+      const data = {
+        email: 'farmer@example.com',
+        firstName: 'John',
+        farmName: 'Farm A',
+        summary: '2 high-risk prediction(s) detected.',
+      };
+
+      await producer.sendPredictionAlert(data);
+
+      expect(mockQueue.add).toHaveBeenCalledWith('prediction-alert', data);
+    });
+  });
 });
