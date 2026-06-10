@@ -133,8 +133,8 @@ export class HealthConsumer extends WorkerHost {
     const { farmIds } = job.data as { farmIds: string[] };
     await Promise.all(
       farmIds.map((id) =>
-        this.computeFarmHealth(id).catch(() =>
-          this.logger.error(`Health compute failed for farm ${id}`),
+        this.computeFarmHealth(id).catch((err) =>
+          this.logger.error(`Health compute failed for farm ${id}`, err),
         ),
       ),
     );
