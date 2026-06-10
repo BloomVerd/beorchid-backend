@@ -14,7 +14,6 @@ import { SensorHistoryPoint } from './entities/sensor-history-point.entity';
 import { YieldComparison } from './entities/yield-comparison.entity';
 import { Prediction } from '../predictions/entities/prediction.entity';
 import { FarmerSettingsService } from '../farmer/farmer-settings.service';
-import { FarmService } from '../farm/farm.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EmailProducer } from '../email/email.producer';
 import { SmsService } from '../sms/sms.service';
@@ -103,7 +102,6 @@ describe('HealthConsumer', () => {
   let yieldRepo: { find: jest.Mock; create: jest.Mock; save: jest.Mock };
   let predictionRepo: { find: jest.Mock };
   let farmerSettingsService: { getOrCreate: jest.Mock };
-  let farmService: { triggerIotDevice: jest.Mock };
   let notificationsService: { create: jest.Mock; pushToStream: jest.Mock };
   let emailProducer: { sendHealthAlert: jest.Mock };
   let smsService: { sendHealthAlert: jest.Mock };
@@ -145,9 +143,6 @@ describe('HealthConsumer', () => {
     farmerSettingsService = {
       getOrCreate: jest.fn().mockResolvedValue({ farmDataLookbackSeconds: 3600 }),
     };
-    farmService = {
-      triggerIotDevice: jest.fn().mockResolvedValue({ id: 'tool-call-1', status: 'PENDING' }),
-    };
     notificationsService = {
       create: jest.fn().mockResolvedValue({ id: 'notif-1' }),
       pushToStream: jest.fn(),
@@ -169,7 +164,6 @@ describe('HealthConsumer', () => {
         { provide: getRepositoryToken(YieldComparison), useValue: yieldRepo },
         { provide: getRepositoryToken(Prediction), useValue: predictionRepo },
         { provide: FarmerSettingsService, useValue: farmerSettingsService },
-        { provide: FarmService, useValue: farmService },
         { provide: NotificationsService, useValue: notificationsService },
         { provide: EmailProducer, useValue: emailProducer },
         { provide: SmsService, useValue: smsService },
@@ -309,11 +303,12 @@ describe('HealthConsumer', () => {
 
       await consumer.process(makeJob({ farmIds: ['farm-1'] }) as any);
 
-      expect(farmService.triggerIotDevice).toHaveBeenCalledWith(
+      expect(notificationsService.create).toHaveBeenCalledWith(
         'farmer-1',
-        'farm-1',
-        'device-uuid-1',
-        { command_type: 'IRRIGATE', parameters: { duration_minutes: 30 } },
+        expect.objectContaining({
+          title: 'Device action recommended',
+          message: expect.stringContaining('IRRIGATE'),
+        }),
       );
       expect(llmCreate).toHaveBeenCalledTimes(2);
       const secondCall = llmCreate.mock.calls[1][0];
@@ -323,7 +318,7 @@ describe('HealthConsumer', () => {
       expect(toolResultMsg).toMatchObject({
         role: 'tool',
         tool_call_id: 'tu-1',
-        content: expect.stringContaining('tool-call-1'),
+        content: expect.stringContaining('Notification sent to farmer'),
       });
       expect(farmHealthRepo.save).toHaveBeenCalled();
     });

@@ -24,7 +24,6 @@ import {
 import { CropType } from '../farm/entities/farm.entity';
 import { Prediction } from '../predictions/entities/prediction.entity';
 import { FarmerSettingsService } from '../farmer/farmer-settings.service';
-import { FarmService } from '../farm/farm.service';
 import { IotCommandType } from '../farm/entities/iot-tool-call.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/entities/notification.entity';
@@ -54,6 +53,7 @@ interface HealthJson {
     spread: string;
     treatment: string;
     infected_leaves?: number | null;
+    prediction_id?: string | null;
   }>;
   health_alerts?: Array<{
     severity: string;
@@ -117,7 +117,6 @@ export class HealthConsumer extends WorkerHost {
     @InjectRepository(Prediction)
     private readonly predictionRepo: Repository<Prediction>,
     private readonly farmerSettingsService: FarmerSettingsService,
-    private readonly farmService: FarmService,
     private readonly notificationsService: NotificationsService,
     private readonly emailProducer: EmailProducer,
     private readonly smsService: SmsService,
@@ -234,16 +233,27 @@ export class HealthConsumer extends WorkerHost {
             }
             let content: string;
             try {
-              const dispatched = await this.farmService.triggerIotDevice(
-                farm?.farmer?.id ?? null,
-                farmId,
-                input.device_id,
-                {
-                  command_type: input.command_type as IotCommandType,
-                  parameters: input.parameters,
-                },
-              );
-              content = `Command dispatched: tool_call_id=${dispatched.id} status=${dispatched.status}`;
+              const deviceLabel =
+                iotDevices.find((d) => d.id === input.device_id)?.label ??
+                input.device_id;
+              const msg = `Action recommended for your farm: ${input.command_type} on device "${deviceLabel}"${input.parameters ? ` (${JSON.stringify(input.parameters)})` : ''}.`;
+              if (farm?.farmer?.id) {
+                const notif = await this.notificationsService.create(
+                  farm.farmer.id,
+                  {
+                    title: 'Device action recommended',
+                    message: msg,
+                    type: NotificationType.HEALTH_ALERT,
+                  },
+                );
+                if (settings?.notifyInApp) {
+                  this.notificationsService.pushToStream(
+                    farm.farmer.id,
+                    notif,
+                  );
+                }
+              }
+              content = `Notification sent to farmer: ${msg}`;
             } catch (err) {
               content = `Error: ${(err as Error).message}`;
             }
@@ -279,6 +289,8 @@ export class HealthConsumer extends WorkerHost {
       json = this.extractJson(retryText);
       parsed = JSON.parse(json);
     }
+
+    const predictionMap = new Map(weekPredictions.map((p) => [p.id, p]));
 
     const health = this.farmHealthRepo.create({
       farm: { id: farmId } as Farm,
@@ -322,6 +334,9 @@ export class HealthConsumer extends WorkerHost {
                 treatment: da.treatment ?? '',
                 infected_leaves: da.infected_leaves ?? undefined,
                 farmHealth: saved,
+                prediction: da.prediction_id
+                  ? predictionMap.get(da.prediction_id)
+                  : undefined,
               }),
             ),
           )
@@ -551,7 +566,7 @@ export class HealthConsumer extends WorkerHost {
       const preds = weekPredictions
         .map(
           (p) =>
-            `type=${p.prediction_type} risk=${p.risk_level ?? 'n/a'} at=${p.lat},${p.lon} on=${p.createdAt.toISOString().split('T')[0]}`,
+            `id=${p.id} type=${p.prediction_type} risk=${p.risk_level ?? 'n/a'} at=${p.lat},${p.lon} on=${p.createdAt.toISOString().split('T')[0]}`,
         )
         .join('; ');
       parts.push(`WEEKLY PREDICTIONS (${weekPredictions.length}): ${preds}`);
@@ -582,7 +597,7 @@ export class HealthConsumer extends WorkerHost {
       function: {
         name: 'trigger_iot_device',
         description:
-          'Trigger a command on a registered IoT device. Use this to act on analysis findings — e.g. start irrigation when soil moisture is critically low, capture a field image when disease probability is high. Only trigger devices listed as active in the context.',
+          'Recommend an IoT device action to the farmer. The farmer will be notified and can approve the action. Use when conditions warrant a device action — e.g. critically low soil moisture → IRRIGATE, high disease probability → CAPTURE_IMAGE. Only recommend active devices listed in the context.',
         parameters: {
           type: 'object',
           properties: {
@@ -637,7 +652,8 @@ Return ONLY valid JSON — no markdown, no explanation, no code fences. Use this
       "first_detected": "ISO 8601 date string",
       "spread": "INCREASING"|"STABLE"|"DECREASING",
       "treatment": "actionable plain-English recommendation",
-      "infected_leaves": <integer or null>
+      "infected_leaves": <integer or null>,
+      "prediction_id": "uuid matching a prediction id from WEEKLY PREDICTIONS context, or null"
     }
   ],
   "health_alerts": [
@@ -677,8 +693,9 @@ Rules:
 - Omit disease_alerts and health_alerts arrays only if there are genuinely none
 - Keep all string values concise and suitable for a mobile UI card
 - Factor in WEEKLY PREDICTIONS when computing disease_risk and health_alerts (HIGH risk predictions raise disease_risk)
+- Set prediction_id on each disease alert to the matching prediction id from WEEKLY PREDICTIONS when a direct link exists; otherwise null
 - Use SENSOR HISTORY to identify moisture and nutrient trends when live sensor readings are sparse
-- Use the trigger_iot_device tool before finalising your assessment when conditions warrant immediate action (e.g. soil moisture critically low → IRRIGATE, high disease probability → CAPTURE_IMAGE). Only call it for active devices.`;
+- Use the trigger_iot_device tool before finalising your assessment when conditions warrant device action (e.g. soil moisture critically low → IRRIGATE, high disease probability → CAPTURE_IMAGE). Only recommend active devices. This notifies the farmer — it does not trigger the device directly.`;
   }
 
   private extractJson(text: string): string {
