@@ -4,6 +4,7 @@ import { PredictionType } from '../../farm/entities/image-data.entity';
 import { FarmHealth } from '../entities/farm-health.entity';
 import { HealthAlert } from '../entities/health-alert.entity';
 import { RiskLevel } from '../../predictions/entities/prediction.entity';
+import { DiseaseAlert } from '../entities/disease-alert.entity';
 
 @ObjectType()
 export class WeatherForecast {
@@ -51,6 +52,9 @@ export class PredictionInsight {
 
   @Field()
   createdAt: Date;
+
+  @Field(() => [DiseaseAlert], { nullable: true })
+  diseaseAlerts?: DiseaseAlert[];
 }
 
 @ObjectType()

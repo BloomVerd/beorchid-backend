@@ -9,6 +9,7 @@ import {
 import { Field, Float, ID, Int, ObjectType } from '@nestjs/graphql';
 import { DiseaseSpread } from './health.enums';
 import { FarmHealth } from './farm-health.entity';
+import { Prediction } from '../../predictions/entities/prediction.entity';
 
 @ObjectType()
 @Entity('disease_alerts')
@@ -57,4 +58,10 @@ export class DiseaseAlert {
     onDelete: 'CASCADE',
   })
   farmHealth: FarmHealth;
+
+  @ManyToOne(() => Prediction, (p) => p.disease_alerts, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  prediction?: Prediction;
 }

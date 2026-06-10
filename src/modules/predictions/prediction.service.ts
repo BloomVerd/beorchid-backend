@@ -125,5 +125,4 @@ export class PredictionService {
 
     return { data, total, page, lastPage: Math.ceil(total / limit) || 1 };
   }
-
 }

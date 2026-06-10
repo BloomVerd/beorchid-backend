@@ -2,7 +2,10 @@ import { Args, Int, Query, Resolver } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { HealthService } from './health.service';
 import { FarmHealth } from './entities/farm-health.entity';
-import { FarmHealthDetail, PaginatedFarmHealthSummaries } from './types/health.types';
+import {
+  FarmHealthDetail,
+  PaginatedFarmHealthSummaries,
+} from './types/health.types';
 import { GqlJwtAuthGuard } from 'src/common/guards';
 import { CurrentFarmer } from 'src/common/decorators';
 import { Farmer } from '../farmer/entities/farmer.entity';

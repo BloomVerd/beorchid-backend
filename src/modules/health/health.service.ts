@@ -158,7 +158,10 @@ export class HealthService {
    * all nested health data (crop fields, disease alerts, health alerts,
    * sensor history, yield comparisons).
    */
-  async getFarmHealth(farmerId: string, farmId: string): Promise<FarmHealthDetail> {
+  async getFarmHealth(
+    farmerId: string,
+    farmId: string,
+  ): Promise<FarmHealthDetail> {
     const farmHealth = await this.farmHealthRepository.findOne({
       where: { farm: { id: farmId, farmer: { id: farmerId } } },
       relations: [
@@ -182,11 +185,15 @@ export class HealthService {
 
     const [weather, rawPredictions] = await Promise.all([
       farmHealth.farm.lat != null && farmHealth.farm.lon != null
-        ? this.weatherService.getForecast(farmHealth.farm.lat, farmHealth.farm.lon)
+        ? this.weatherService.getForecast(
+            farmHealth.farm.lat,
+            farmHealth.farm.lon,
+          )
         : Promise.resolve(undefined),
       this.predictionRepository
         .createQueryBuilder('p')
         .leftJoinAndSelect('p.image', 'image')
+        .leftJoinAndSelect('p.disease_alerts', 'disease_alerts')
         .where('p."farmId" = :farmId', { farmId })
         .andWhere('p.createdAt >= :weekAgo', { weekAgo })
         .orderBy('p.createdAt', 'DESC')
@@ -202,6 +209,9 @@ export class HealthService {
           lon: p.lon,
           imageUrl: p.image?.url ?? undefined,
           createdAt: p.createdAt,
+          diseaseAlerts: p.disease_alerts?.length
+            ? p.disease_alerts
+            : undefined,
         }))
       : undefined;
 

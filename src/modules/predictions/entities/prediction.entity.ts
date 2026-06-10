@@ -3,6 +3,7 @@ import {
   CreateDateColumn,
   Entity,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { Field, Float, ID, ObjectType, registerEnumType } from '@nestjs/graphql';
@@ -11,6 +12,7 @@ import {
   ImageData,
   PredictionType,
 } from '../../farm/entities/image-data.entity';
+import { DiseaseAlert } from '../../health/entities/disease-alert.entity';
 
 export enum RiskLevel {
   LOW = 'low',
@@ -59,4 +61,8 @@ export class Prediction {
     onDelete: 'SET NULL',
   })
   image?: ImageData;
+
+  @Field(() => [DiseaseAlert], { nullable: true })
+  @OneToMany(() => DiseaseAlert, (da) => da.prediction)
+  disease_alerts?: DiseaseAlert[];
 }
