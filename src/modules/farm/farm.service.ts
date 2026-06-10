@@ -85,6 +85,36 @@ export class FarmService {
     return new AWS.IAM({ region, accessKeyId, secretAccessKey });
   }
 
+  private buildCloudWatchLogsClient(): AWS.CloudWatchLogs | null {
+    const region = this.configService.get<string>('IOT_REGION');
+    const accessKeyId = this.configService.get<string>('IOT_ACCESS_KEY_ID');
+    const secretAccessKey = this.configService.get<string>(
+      'IOT_SECRET_ACCESS_KEY',
+    );
+    if (!region || !accessKeyId || !secretAccessKey) return null;
+    return new AWS.CloudWatchLogs({ region, accessKeyId, secretAccessKey });
+  }
+
+  private async ensureLogGroups(): Promise<void> {
+    const cwClient = this.buildCloudWatchLogsClient();
+    if (!cwClient) return;
+
+    const logGroups = [
+      '/beorchid/iot/rule/job-updates',
+      '/beorchid/iot/rule/errors',
+    ];
+
+    for (const logGroupName of logGroups) {
+      try {
+        await cwClient.createLogGroup({ logGroupName }).promise();
+      } catch (err: any) {
+        if (err?.code !== 'ResourceAlreadyExistsException') {
+          console.log(`Failed to create log group ${logGroupName}:`, err?.message);
+        }
+      }
+    }
+  }
+
   private async ensureIotRuleRole(): Promise<string | null> {
     const iamClient = this.buildIamClient();
     if (!iamClient) return null;
@@ -95,6 +125,7 @@ export class FarmService {
       const { Role } = await iamClient
         .getRole({ RoleName: roleName })
         .promise();
+      await this.ensureLogGroups();
       return Role.Arn;
     } catch (err: any) {
       if (err?.code !== 'NoSuchEntity') {
@@ -144,6 +175,7 @@ export class FarmService {
         })
         .promise();
 
+      await this.ensureLogGroups();
       return Role.Arn;
     } catch (err: any) {
       console.log(

@@ -36,10 +36,15 @@ const mockIamInstance = {
   putRolePolicy: jest.fn().mockReturnValue(makeIotPromise({})),
 };
 
+const mockCwLogsInstance = {
+  createLogGroup: jest.fn().mockReturnValue(makeIotPromise({})),
+};
+
 jest.mock('aws-sdk', () => ({
   Iot: jest.fn().mockImplementation(() => mockIotInstance),
   IotData: jest.fn().mockImplementation(() => mockIotDataInstance),
   IAM: jest.fn().mockImplementation(() => mockIamInstance),
+  CloudWatchLogs: jest.fn().mockImplementation(() => mockCwLogsInstance),
 }));
 
 const mockZipInstance = {
@@ -255,6 +260,7 @@ describe('FarmService', () => {
     (AWS.Iot as jest.Mock).mockImplementation(() => mockIotInstance);
     (AWS.IotData as jest.Mock).mockImplementation(() => mockIotDataInstance);
     (AWS.IAM as jest.Mock).mockImplementation(() => mockIamInstance);
+    (AWS.CloudWatchLogs as jest.Mock).mockImplementation(() => mockCwLogsInstance);
 
     // Reset IoT mocks and re-initialize return values (Jest 30 clearAllMocks resets them)
     Object.values(mockIotInstance).forEach((fn) => (fn as jest.Mock).mockClear());
@@ -289,6 +295,9 @@ describe('FarmService', () => {
       makeIotPromise({ Role: { Arn: 'arn:aws:iam::123456789012:role/BeorchidIotRuleRole' } }),
     );
     mockIamInstance.putRolePolicy.mockReturnValue(makeIotPromise({}));
+
+    Object.values(mockCwLogsInstance).forEach((fn) => (fn as jest.Mock).mockClear());
+    mockCwLogsInstance.createLogGroup.mockReturnValue(makeIotPromise({}));
 
     mockZipInstance.file.mockClear();
     mockZipInstance.generateAsync.mockResolvedValue(Buffer.from('PK'));
