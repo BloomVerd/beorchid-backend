@@ -258,8 +258,27 @@ export class HealthConsumer extends WorkerHost {
       messages.push(...toolResults);
     }
 
-    const json = this.extractJson(rawText);
-    const parsed: HealthJson = JSON.parse(json);
+    let json = this.extractJson(rawText);
+    let parsed: HealthJson;
+    try {
+      parsed = JSON.parse(json);
+    } catch {
+      // Model returned non-JSON prose; ask it to emit only the JSON object
+      messages.push({ role: 'assistant' as const, content: rawText });
+      messages.push({
+        role: 'user' as const,
+        content:
+          'Your previous response was not valid JSON. Output ONLY the JSON object with no other text.',
+      });
+      const retry = await this.llm.chat.completions.create({
+        model: this.model,
+        max_tokens: 2048,
+        messages,
+      });
+      const retryText = retry.choices[0]?.message?.content ?? '';
+      json = this.extractJson(retryText);
+      parsed = JSON.parse(json);
+    }
 
     const health = this.farmHealthRepo.create({
       farm: { id: farmId } as Farm,
