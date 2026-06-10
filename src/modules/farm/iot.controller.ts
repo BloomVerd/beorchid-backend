@@ -101,13 +101,12 @@ export class IotController {
     @Query('confirmationToken') confirmationToken: string,
     @Res() res: any,
   ): Promise<void> {
-    try {
-      await this.farmService.confirmIotDestination(confirmationToken);
-      res.status(200).send(confirmationToken);
-    } catch (err) {
-      console.log('CONFIRMATION_FAILED:', err);
-      res.status(500).json({ message: 'Confirmation failed' });
+    console.log('IOT_CONFIRM_TOKEN:', confirmationToken);
+    if (!confirmationToken) {
+      res.status(400).send('Missing confirmationToken');
+      return;
     }
+    res.status(200).send(confirmationToken);
   }
 
   @Post('iot/webhook')
