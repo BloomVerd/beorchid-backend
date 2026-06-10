@@ -1,16 +1,14 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateNotificationsTable1750100000000
-  implements MigrationInterface
-{
+export class CreateNotificationsTable1750100000000 implements MigrationInterface {
   name = 'CreateNotificationsTable1750100000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TYPE "notification_type_enum" AS ENUM ('PREDICTION_ALERT')
+      CREATE TYPE IF NOT EXISTS "notification_type_enum" AS ENUM ('PREDICTION_ALERT')
     `);
     await queryRunner.query(`
-      CREATE TABLE "notifications" (
+      CREATE TABLE IF NOT EXISTS "notifications" (
         "id"         uuid               NOT NULL DEFAULT uuid_generate_v4(),
         "title"      varchar            NOT NULL,
         "message"    text               NOT NULL,
@@ -24,7 +22,7 @@ export class CreateNotificationsTable1750100000000
       )
     `);
     await queryRunner.query(`
-      CREATE INDEX "IDX_notifications_farmer" ON "notifications" ("farmerId")
+      CREATE INDEX IF NOT EXISTS "IDX_notifications_farmer" ON "notifications" ("farmerId")
     `);
   }
 
