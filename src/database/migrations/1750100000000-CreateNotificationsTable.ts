@@ -5,7 +5,10 @@ export class CreateNotificationsTable1750100000000 implements MigrationInterface
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "notification_type_enum" AS ENUM ('PREDICTION_ALERT')
+      DO $$ BEGIN
+        CREATE TYPE "notification_type_enum" AS ENUM ('PREDICTION_ALERT');
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$
     `);
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "notifications" (
