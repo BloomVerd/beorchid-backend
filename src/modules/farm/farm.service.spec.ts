@@ -26,9 +26,20 @@ const mockIotDataInstance = {
   publish: jest.fn().mockReturnValue(makeIotPromise({})),
 };
 
+const mockIamInstance = {
+  getRole: jest.fn().mockReturnValue(
+    makeIotPromise({ Role: { Arn: 'arn:aws:iam::123456789012:role/BeorchidIotRuleRole' } }),
+  ),
+  createRole: jest.fn().mockReturnValue(
+    makeIotPromise({ Role: { Arn: 'arn:aws:iam::123456789012:role/BeorchidIotRuleRole' } }),
+  ),
+  putRolePolicy: jest.fn().mockReturnValue(makeIotPromise({})),
+};
+
 jest.mock('aws-sdk', () => ({
   Iot: jest.fn().mockImplementation(() => mockIotInstance),
   IotData: jest.fn().mockImplementation(() => mockIotDataInstance),
+  IAM: jest.fn().mockImplementation(() => mockIamInstance),
 }));
 
 const mockZipInstance = {
@@ -243,6 +254,7 @@ describe('FarmService', () => {
     // Re-initialize AWS constructors (Jest 30 clearAllMocks resets mockImplementation)
     (AWS.Iot as jest.Mock).mockImplementation(() => mockIotInstance);
     (AWS.IotData as jest.Mock).mockImplementation(() => mockIotDataInstance);
+    (AWS.IAM as jest.Mock).mockImplementation(() => mockIamInstance);
 
     // Reset IoT mocks and re-initialize return values (Jest 30 clearAllMocks resets them)
     Object.values(mockIotInstance).forEach((fn) => (fn as jest.Mock).mockClear());
@@ -268,6 +280,15 @@ describe('FarmService', () => {
 
     Object.values(mockIotDataInstance).forEach((fn) => (fn as jest.Mock).mockClear());
     mockIotDataInstance.publish.mockReturnValue(makeIotPromise({}));
+
+    Object.values(mockIamInstance).forEach((fn) => (fn as jest.Mock).mockClear());
+    mockIamInstance.getRole.mockReturnValue(
+      makeIotPromise({ Role: { Arn: 'arn:aws:iam::123456789012:role/BeorchidIotRuleRole' } }),
+    );
+    mockIamInstance.createRole.mockReturnValue(
+      makeIotPromise({ Role: { Arn: 'arn:aws:iam::123456789012:role/BeorchidIotRuleRole' } }),
+    );
+    mockIamInstance.putRolePolicy.mockReturnValue(makeIotPromise({}));
 
     mockZipInstance.file.mockClear();
     mockZipInstance.generateAsync.mockResolvedValue(Buffer.from('PK'));
@@ -1173,6 +1194,45 @@ describe('FarmService', () => {
       await service.setupIotRule();
 
       expect(mockIotInstance.createTopicRule).not.toHaveBeenCalled();
+    });
+
+    it('includes cloudwatchLogs action and errorAction when IAM role is available', async () => {
+      await service.setupIotRule();
+
+      const call = mockIotInstance.createTopicRule.mock.calls[0][0];
+      const { actions, errorAction } = call.topicRulePayload;
+
+      expect(actions).toContainEqual(
+        expect.objectContaining({
+          cloudwatchLogs: expect.objectContaining({
+            logGroupName: '/beorchid/iot/rule/job-updates',
+            roleArn: 'arn:aws:iam::123456789012:role/BeorchidIotRuleRole',
+          }),
+        }),
+      );
+      expect(errorAction).toEqual(
+        expect.objectContaining({
+          cloudwatchLogs: expect.objectContaining({
+            logGroupName: '/beorchid/iot/rule/errors',
+            roleArn: 'arn:aws:iam::123456789012:role/BeorchidIotRuleRole',
+          }),
+        }),
+      );
+    });
+
+    it('omits cloudwatchLogs when IAM operations fail', async () => {
+      mockIamInstance.getRole.mockReturnValue({
+        promise: jest.fn().mockRejectedValue(new Error('access denied')),
+      });
+
+      await service.setupIotRule();
+
+      const call = mockIotInstance.createTopicRule.mock.calls[0][0];
+      const { actions, errorAction } = call.topicRulePayload;
+
+      expect(actions).toHaveLength(1);
+      expect(actions[0]).toHaveProperty('http');
+      expect(errorAction).toBeUndefined();
     });
   });
 

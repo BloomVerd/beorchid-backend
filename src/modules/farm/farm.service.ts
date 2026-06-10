@@ -75,6 +75,85 @@ export class FarmService {
     return new AWS.IotData({ endpoint, region, accessKeyId, secretAccessKey });
   }
 
+  private buildIamClient(): AWS.IAM | null {
+    const region = this.configService.get<string>('IOT_REGION');
+    const accessKeyId = this.configService.get<string>('IOT_ACCESS_KEY_ID');
+    const secretAccessKey = this.configService.get<string>(
+      'IOT_SECRET_ACCESS_KEY',
+    );
+    if (!region || !accessKeyId || !secretAccessKey) return null;
+    return new AWS.IAM({ region, accessKeyId, secretAccessKey });
+  }
+
+  private async ensureIotRuleRole(): Promise<string | null> {
+    const iamClient = this.buildIamClient();
+    if (!iamClient) return null;
+
+    const roleName = 'BeorchidIotRuleRole';
+
+    try {
+      const { Role } = await iamClient
+        .getRole({ RoleName: roleName })
+        .promise();
+      return Role.Arn;
+    } catch (err: any) {
+      if (err?.code !== 'NoSuchEntity') {
+        console.log(
+          'IAM getRole failed, skipping CloudWatch actions:',
+          err?.message,
+        );
+        return null;
+      }
+    }
+
+    try {
+      const { Role } = await iamClient
+        .createRole({
+          RoleName: roleName,
+          AssumeRolePolicyDocument: JSON.stringify({
+            Version: '2012-10-17',
+            Statement: [
+              {
+                Effect: 'Allow',
+                Principal: { Service: 'iot.amazonaws.com' },
+                Action: 'sts:AssumeRole',
+              },
+            ],
+          }),
+        })
+        .promise();
+
+      await iamClient
+        .putRolePolicy({
+          RoleName: roleName,
+          PolicyName: 'BeorchidIotRuleCloudWatchLogs',
+          PolicyDocument: JSON.stringify({
+            Version: '2012-10-17',
+            Statement: [
+              {
+                Effect: 'Allow',
+                Action: [
+                  'logs:CreateLogGroup',
+                  'logs:CreateLogStream',
+                  'logs:PutLogEvents',
+                ],
+                Resource: 'arn:aws:logs:*:*:*',
+              },
+            ],
+          }),
+        })
+        .promise();
+
+      return Role.Arn;
+    } catch (err: any) {
+      console.log(
+        'IAM role creation failed, skipping CloudWatch actions:',
+        err?.message,
+      );
+      return null;
+    }
+  }
+
   async addFarm(farmerId: string, input: CreateFarmInput): Promise<Farm> {
     const subscription =
       await this.subscriptionService.getActiveSubscription(farmerId);
@@ -1236,9 +1315,10 @@ runSample()
   async confirmIotDestination(confirmationToken: string): Promise<void> {
     const iotClient = this.buildIotClient();
     if (!iotClient) return;
-    await iotClient
+    const results = await iotClient
       .confirmTopicRuleDestination({ confirmationToken })
       .promise();
+    console.log('confirmIotDestination:', results);
   }
 
   async setupIotRule(): Promise<void> {
@@ -1255,6 +1335,8 @@ runSample()
     const headers: AWS.Iot.HttpActionHeader[] = webhookSecret
       ? [{ key: 'x-iot-secret', value: webhookSecret }]
       : [];
+
+    const roleArn = await this.ensureIotRuleRole();
 
     // Force delete so AWS IoT retries the confirmation handshake
     try {
@@ -1276,7 +1358,25 @@ runSample()
                   headers,
                 },
               },
+              ...(roleArn
+                ? [
+                    {
+                      cloudwatchLogs: {
+                        logGroupName: '/beorchid/iot/rule/job-updates',
+                        roleArn,
+                      },
+                    },
+                  ]
+                : []),
             ],
+            ...(roleArn && {
+              errorAction: {
+                cloudwatchLogs: {
+                  logGroupName: '/beorchid/iot/rule/errors',
+                  roleArn,
+                },
+              },
+            }),
             awsIotSqlVersion: '2016-03-23',
             ruleDisabled: false,
           },
