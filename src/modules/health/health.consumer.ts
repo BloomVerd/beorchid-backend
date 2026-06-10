@@ -133,8 +133,8 @@ export class HealthConsumer extends WorkerHost {
     const { farmIds } = job.data as { farmIds: string[] };
     await Promise.all(
       farmIds.map((id) =>
-        this.computeFarmHealth(id).catch((err) =>
-          this.logger.error(`Health compute failed for farm ${id}`, err),
+        this.computeFarmHealth(id).catch(() =>
+          this.logger.error(`Health compute failed for farm ${id}`),
         ),
       ),
     );
@@ -391,14 +391,17 @@ export class HealthConsumer extends WorkerHost {
     if (!farm?.farmer || !settings) return;
 
     const actionableHealthAlerts = (healthAlerts ?? []).filter(
-      (a) =>
-        a.severity === AlertSeverity.CRITICAL || a.severity === 'WARNING',
+      (a) => a.severity === AlertSeverity.CRITICAL || a.severity === 'WARNING',
     );
     const hasDisease = (diseaseAlerts ?? []).length > 0;
 
     if (!actionableHealthAlerts.length && !hasDisease) return;
 
-    const summary = this.buildHealthSummary(health, diseaseAlerts ?? [], healthAlerts ?? []);
+    const summary = this.buildHealthSummary(
+      health,
+      diseaseAlerts ?? [],
+      healthAlerts ?? [],
+    );
 
     const notification = await this.notificationsService.create(
       farm.farmer.id,
@@ -439,7 +442,9 @@ export class HealthConsumer extends WorkerHost {
     const parts: string[] = [
       `Overall health: ${Math.round(health.overall_score)}/100.`,
     ];
-    const critical = healthAlerts.filter((a) => a.severity === AlertSeverity.CRITICAL);
+    const critical = healthAlerts.filter(
+      (a) => a.severity === AlertSeverity.CRITICAL,
+    );
     const warning = healthAlerts.filter((a) => a.severity === 'WARNING');
     if (critical.length) parts.push(`${critical.length} critical alert(s).`);
     if (warning.length) parts.push(`${warning.length} warning(s).`);

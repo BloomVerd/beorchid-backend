@@ -814,6 +814,7 @@ const JOB_GET_ACCEPTED_TOPIC_FILTER = \`$aws/things/\${THING_NAME}/jobs/+/get/ac
 const JOB_GET_NEXT_ACCEPTED_TOPIC = \`$aws/things/\${THING_NAME}/jobs/$next/get/accepted\`;
 const JOB_GET_ACCEPTED_PREFIX = \`$aws/things/\${THING_NAME}/jobs/\`;
 const JOB_GET_NEXT_TOPIC = \`$aws/things/\${THING_NAME}/jobs/$next/get\`;
+const JOB_UPDATE_ACCEPTED_TOPIC_FILTER = \`$aws/things/\${THING_NAME}/jobs/+/update/accepted\`;
 
 // --------------------------------- ARGUMENT PARSING -----------------------------------------
 const args = yargs
@@ -967,9 +968,14 @@ async function handleJobExecution(
       payload: JSON.stringify({ status: "IN_PROGRESS" }),
       qos: mqtt5.QoS.AtLeastOnce,
     });
+    // Publish to custom topic for the IoT rule to pick up
     await client.publish({
       topicName: \`farms/\${FARM_ID}/\${DEVICE_ID}/jobs/status\`,
-      payload: JSON.stringify({ tool_call_id: jobId, status: "IN_PROGRESS" }),
+      payload: JSON.stringify({
+        tool_call_id: jobId,
+        status: "IN_PROGRESS",
+        response: { result: "in_progress" },
+      }),
       qos: mqtt5.QoS.AtLeastOnce,
     });
 
@@ -977,9 +983,13 @@ async function handleJobExecution(
 
     await client.publish({
       topicName: \`$aws/things/\${THING_NAME}/jobs/\${jobId}/update\`,
-      payload: JSON.stringify({ status: "SUCCEEDED" }),
+      payload: JSON.stringify({
+        status: "SUCCEEDED",
+        statusDetails: { result: "ok" },
+      }),
       qos: mqtt5.QoS.AtLeastOnce,
     });
+    // Publish to custom topic for the IoT rule to pick up
     await client.publish({
       topicName: \`farms/\${FARM_ID}/\${DEVICE_ID}/jobs/status\`,
       payload: JSON.stringify({
@@ -993,7 +1003,10 @@ async function handleJobExecution(
   } catch (err) {
     await client.publish({
       topicName: \`$aws/things/\${THING_NAME}/jobs/\${jobId}/update\`,
-      payload: JSON.stringify({ status: "FAILED" }),
+      payload: JSON.stringify({
+        status: "FAILED",
+        statusDetails: { error: String(err) },
+      }),
       qos: mqtt5.QoS.AtLeastOnce,
     });
     await client.publish({
@@ -1065,6 +1078,16 @@ async function runSample() {
         return;
       }
 
+      if (
+        message.topicName.startsWith(JOB_GET_ACCEPTED_PREFIX) &&
+        message.topicName.endsWith("/update/accepted")
+      ) {
+        console.log(
+          \`==== Job update accepted: '\${message.topicName}': \${payload} ====\\n\`,
+        );
+        return;
+      }
+
       receivedCount++;
       if (receivedCount === args.count) {
         setImmediate(() => client.emit("receivedAll"));
@@ -1133,6 +1156,10 @@ async function runSample() {
         qos: mqtt5.QoS.AtLeastOnce,
       },
       { topicFilter: JOB_GET_NEXT_ACCEPTED_TOPIC, qos: mqtt5.QoS.AtLeastOnce },
+      {
+        topicFilter: JOB_UPDATE_ACCEPTED_TOPIC_FILTER,
+        qos: mqtt5.QoS.AtLeastOnce,
+      },
     ],
   });
   console.log("==== Subscribed to IoT Jobs topics ====\\n");
@@ -1202,6 +1229,7 @@ async function runSample() {
       JOB_NOTIFY_NEXT_TOPIC,
       JOB_GET_ACCEPTED_TOPIC_FILTER,
       JOB_GET_NEXT_ACCEPTED_TOPIC,
+      JOB_UPDATE_ACCEPTED_TOPIC_FILTER,
     ],
   });
 
