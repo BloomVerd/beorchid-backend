@@ -39,6 +39,14 @@ export class Farmer {
   @Column({ nullable: true })
   googleId?: string;
 
+  @Field(() => [String])
+  @Column({ type: 'simple-array', default: 'farmer' })
+  roles: string[];
+
+  @Field()
+  @Column({ default: false })
+  isFieldAgent: boolean;
+
   @Column({ default: true })
   isActive: boolean;
 

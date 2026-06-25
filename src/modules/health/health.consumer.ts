@@ -247,10 +247,7 @@ export class HealthConsumer extends WorkerHost {
                   },
                 );
                 if (settings?.notifyInApp) {
-                  this.notificationsService.pushToStream(
-                    farm.farmer.id,
-                    notif,
-                  );
+                  this.notificationsService.pushToStream(farm.farmer.id, notif);
                 }
               }
               content = `Notification sent to farmer: ${msg}`;

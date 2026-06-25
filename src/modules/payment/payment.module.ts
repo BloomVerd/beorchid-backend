@@ -43,6 +43,6 @@ import { SmsModule } from '../sms/sms.module';
     PaymentService,
     SubscriptionResolver,
   ],
-  exports: [SubscriptionPlanService, SubscriptionService],
+  exports: [SubscriptionPlanService, SubscriptionService, PaymentService],
 })
 export class PaymentModule {}

@@ -20,6 +20,17 @@ import { FarmDataModule } from './modules/farm-data/farm-data.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SmsModule } from './modules/sms/sms.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { OrganizationModule } from './modules/organization/organization.module';
+import { MarketModule } from './modules/market/market.module';
+import { FieldModule } from './modules/field/field.module';
+import { IngestionModule } from './modules/ingestion/ingestion.module';
+import { WalletModule } from './modules/wallet/wallet.module';
+import { MarketplaceModule } from './modules/marketplace/marketplace.module';
+import { InvestmentModule } from './modules/investment/investment.module';
+import { CoinModule } from './modules/coin/coin.module';
+import { WatchlistModule } from './modules/watchlist/watchlist.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
   imports: [
@@ -62,6 +73,17 @@ import { SmsModule } from './modules/sms/sms.module';
     PaymentModule,
     NotificationsModule,
     SmsModule,
+    AuditModule,
+    OrganizationModule,
+    MarketModule,
+    FieldModule,
+    IngestionModule,
+    WalletModule,
+    MarketplaceModule,
+    InvestmentModule,
+    CoinModule,
+    WatchlistModule,
+    AdminModule,
   ],
 })
 export class AppModule {}

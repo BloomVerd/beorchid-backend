@@ -52,4 +52,12 @@ export class EmailProducer {
   }) {
     await this.emailQueue.add('farm-setup-complete', data);
   }
+
+  async sendSuperAdminCredentials(data: {
+    email: string;
+    firstName: string;
+    password: string;
+  }) {
+    await this.emailQueue.add('super-admin-credentials', data);
+  }
 }

@@ -62,4 +62,9 @@ export const configValidationSchema = Joi.object({
 
   // Paystack
   PAYSTACK_SECRET_KEY: Joi.string().optional(),
+
+  // Super Admin seed
+  SUPER_ADMIN_EMAIL: Joi.string().email().optional(),
+  SUPER_ADMIN_FIRST_NAME: Joi.string().optional(),
+  SUPER_ADMIN_LAST_NAME: Joi.string().optional(),
 });

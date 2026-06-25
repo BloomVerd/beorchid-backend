@@ -234,7 +234,12 @@ export class AuthService {
   }
 
   private async issueTokens(farmer: Farmer): Promise<AuthPayload> {
-    const payload = { id: farmer.id, email: farmer.email };
+    const payload = {
+      id: farmer.id,
+      email: farmer.email,
+      roles: farmer.roles ?? ['farmer'],
+      isFieldAgent: farmer.isFieldAgent ?? false,
+    };
     const accessToken = this.jwtService.sign(payload, { expiresIn: '24h' });
 
     const rawRefreshToken = crypto.randomBytes(40).toString('hex');

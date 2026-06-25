@@ -40,6 +40,11 @@ export class EmailProcessor extends WorkerHost {
         await this.emailService.sendFarmSetupComplete(email, firstName, farmName);
         break;
       }
+      case 'super-admin-credentials': {
+        const { email, firstName, password } = job.data;
+        await this.emailService.sendSuperAdminCredentials(email, firstName, email, password);
+        break;
+      }
     }
   }
 }

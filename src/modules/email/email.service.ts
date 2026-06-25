@@ -77,6 +77,11 @@ export class EmailService {
     await this.send(to, `Your ${planName} plan is now active`, html);
   }
 
+  async sendSuperAdminCredentials(to: string, firstName: string, email: string, password: string): Promise<void> {
+    const html = this.compileTemplate('super-admin-credentials', { firstName, email, password });
+    await this.send(to, 'Your BeOrchid Super Admin credentials', html);
+  }
+
   async sendFarmSetupComplete(
     to: string,
     firstName: string,

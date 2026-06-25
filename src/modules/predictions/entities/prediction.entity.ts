@@ -6,7 +6,13 @@ import {
   OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { Field, Float, ID, ObjectType, registerEnumType } from '@nestjs/graphql';
+import {
+  Field,
+  Float,
+  ID,
+  ObjectType,
+  registerEnumType,
+} from '@nestjs/graphql';
 import { Farm } from '../../farm/entities/farm.entity';
 import {
   ImageData,
