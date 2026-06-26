@@ -5,8 +5,10 @@ export class CreateMarketplaceTables1751200000000 implements MigrationInterface 
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "listing_status_enum"
-        AS ENUM ('draft', 'open', 'under_offer', 'accepted', 'sold', 'withdrawn', 'expired')
+      DO $$ BEGIN
+        CREATE TYPE "listing_status_enum" AS ENUM ('draft', 'open', 'under_offer', 'accepted', 'sold', 'withdrawn', 'expired');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "listings" (
@@ -29,8 +31,10 @@ export class CreateMarketplaceTables1751200000000 implements MigrationInterface 
     await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_listing_status" ON "listings" ("status")`);
 
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "offer_status_enum"
-        AS ENUM ('pending', 'countered', 'accepted', 'rejected', 'withdrawn', 'expired')
+      DO $$ BEGIN
+        CREATE TYPE "offer_status_enum" AS ENUM ('pending', 'countered', 'accepted', 'rejected', 'withdrawn', 'expired');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "offers" (
@@ -51,8 +55,10 @@ export class CreateMarketplaceTables1751200000000 implements MigrationInterface 
     await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_offer_buyer"   ON "offers" ("buyerId")`);
 
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "deal_status_enum"
-        AS ENUM ('pending_payment', 'in_escrow', 'completed', 'cancelled', 'disputed')
+      DO $$ BEGIN
+        CREATE TYPE "deal_status_enum" AS ENUM ('pending_payment', 'in_escrow', 'completed', 'cancelled', 'disputed');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "deals" (

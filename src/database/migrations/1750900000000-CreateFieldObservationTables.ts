@@ -5,20 +5,28 @@ export class CreateFieldObservationTables1750900000000 implements MigrationInter
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "field_price_type_enum"
-        AS ENUM ('farm_gate', 'wholesale', 'retail', 'auction')
+      DO $$ BEGIN
+        CREATE TYPE "field_price_type_enum" AS ENUM ('farm_gate', 'wholesale', 'retail', 'auction');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "quality_grade_enum"
-        AS ENUM ('A', 'B', 'C', 'ungraded')
+      DO $$ BEGIN
+        CREATE TYPE "quality_grade_enum" AS ENUM ('A', 'B', 'C', 'ungraded');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "observation_confidence_enum"
-        AS ENUM ('low', 'medium', 'high')
+      DO $$ BEGIN
+        CREATE TYPE "observation_confidence_enum" AS ENUM ('low', 'medium', 'high');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "observation_status_enum"
-        AS ENUM ('submitted', 'under_review', 'approved', 'rejected')
+      DO $$ BEGIN
+        CREATE TYPE "observation_status_enum" AS ENUM ('submitted', 'under_review', 'approved', 'rejected');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
 
     await queryRunner.query(`

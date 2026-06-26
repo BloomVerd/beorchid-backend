@@ -69,7 +69,7 @@ export class MarketplaceResolver {
   makeOffer(
     @Args('listingId', { type: () => ID }) listingId: string,
     @Args('amount', { type: () => Number }) amount: number,
-    @Args('message', { nullable: true }) message: string | undefined,
+    @Args('message', { nullable: true, type: () => String }) message: string | undefined,
     @CurrentFarmer() user: Farmer,
   ): Promise<Offer> {
     return this.marketplaceService.makeOffer(listingId, user.id, amount, message);
@@ -79,7 +79,7 @@ export class MarketplaceResolver {
   counterOffer(
     @Args('offerId', { type: () => ID }) offerId: string,
     @Args('amount', { type: () => Number }) amount: number,
-    @Args('message', { nullable: true }) message: string | undefined,
+    @Args('message', { nullable: true, type: () => String }) message: string | undefined,
     @CurrentFarmer() user: Farmer,
   ): Promise<Offer> {
     return this.marketplaceService.counterOffer(offerId, user.id, amount, message);

@@ -25,12 +25,12 @@ export class MarketSurveyInsight {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   cropId: string | null;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   region: string | null;
 
   @Field(() => InsightType)

@@ -25,7 +25,7 @@ export class FieldAgentCapability {
   @CreateDateColumn()
   grantedAt: Date;
 
-  @Field({ nullable: true })
+  @Field(() => Date, { nullable: true })
   @Column({ type: 'timestamptz', nullable: true })
   revokedAt: Date | null;
 }

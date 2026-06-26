@@ -82,8 +82,8 @@ export class FieldObservation {
   @Column()
   agentId: string;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   agentDeviceId: string | null;
 
   @Field(() => [String])
@@ -102,20 +102,20 @@ export class FieldObservation {
   @Column({ type: 'enum', enum: ObservationStatus, default: ObservationStatus.SUBMITTED })
   status: ObservationStatus;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   reviewedBy: string | null;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   @Column({ type: 'text', nullable: true })
   reviewNote: string | null;
 
-  @Field({ nullable: true })
+  @Field(() => Date, { nullable: true })
   @Column({ type: 'timestamptz', nullable: true })
   reviewedAt: Date | null;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   marketPricePointId: string | null;
 
   @Field()

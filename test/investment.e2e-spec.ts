@@ -7,7 +7,8 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import * as request from 'supertest';
+import request from 'supertest';
+import { DataSource } from 'typeorm';
 import { InvestmentPlan, PlanStatus } from '../src/modules/investment/entities/investment-plan.entity';
 import { InvestmentPurchase, PurchaseStatus } from '../src/modules/investment/entities/investment-purchase.entity';
 import { InvestmentSettlement } from '../src/modules/investment/entities/investment-settlement.entity';
@@ -16,6 +17,7 @@ import { InvestmentResolver } from '../src/modules/investment/investment.resolve
 import { WalletService } from '../src/modules/wallet/wallet.service';
 import { NotificationsService } from '../src/modules/notifications/notifications.service';
 import { GqlJwtAuthGuard } from '../src/common/guards';
+import { RolesGuard } from '../src/modules/roles';
 
 const passGuard = { canActivate: () => true };
 
@@ -95,12 +97,14 @@ describe('Investment (e2e)', () => {
         { provide: getRepositoryToken(InvestmentPlan),       useValue: planRepo       },
         { provide: getRepositoryToken(InvestmentPurchase),   useValue: purchaseRepo   },
         { provide: getRepositoryToken(InvestmentSettlement), useValue: settlementRepo },
-        { provide: 'DataSource',                             useValue: dataSource     },
+        { provide: DataSource,                               useValue: dataSource     },
         { provide: WalletService,        useValue: walletService        },
         { provide: NotificationsService, useValue: notificationsService },
       ],
     })
       .overrideGuard(GqlJwtAuthGuard)
+      .useValue(passGuard)
+      .overrideGuard(RolesGuard)
       .useValue(passGuard)
       .compile();
 
@@ -123,7 +127,7 @@ describe('Investment (e2e)', () => {
 
     expect(body.errors).toBeUndefined();
     expect(body.data.investmentPlans).toHaveLength(1);
-    expect(body.data.investmentPlans[0].status).toBe('open');
+    expect(body.data.investmentPlans[0].status).toBe('OPEN');
   });
 
   // ── purchaseInvestment ────────────────────────────────────────────────────
@@ -152,7 +156,7 @@ describe('Investment (e2e)', () => {
       });
 
     expect(body.errors).toBeUndefined();
-    expect(body.data.purchaseInvestment.status).toBe('active');
+    expect(body.data.purchaseInvestment.status).toBe('ACTIVE');
     expect(body.data.purchaseInvestment.principal).toBe(250000);
   });
 

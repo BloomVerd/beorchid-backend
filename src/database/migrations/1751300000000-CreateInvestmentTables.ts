@@ -5,8 +5,10 @@ export class CreateInvestmentTables1751300000000 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "plan_status_enum"
-        AS ENUM ('draft', 'open', 'closed', 'matured', 'settled')
+      DO $$ BEGIN
+        CREATE TYPE "plan_status_enum" AS ENUM ('draft', 'open', 'closed', 'matured', 'settled');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "investment_plans" (
@@ -29,8 +31,10 @@ export class CreateInvestmentTables1751300000000 implements MigrationInterface {
     `);
 
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "purchase_status_enum"
-        AS ENUM ('active', 'matured', 'settled', 'cancelled')
+      DO $$ BEGIN
+        CREATE TYPE "purchase_status_enum" AS ENUM ('active', 'matured', 'settled', 'cancelled');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "investment_purchases" (

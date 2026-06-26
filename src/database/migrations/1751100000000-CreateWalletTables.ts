@@ -5,7 +5,10 @@ export class CreateWalletTables1751100000000 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "wallet_owner_type_enum" AS ENUM ('user', 'org')
+      DO $$ BEGIN
+        CREATE TYPE "wallet_owner_type_enum" AS ENUM ('user', 'org');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "wallets" (
@@ -22,11 +25,16 @@ export class CreateWalletTables1751100000000 implements MigrationInterface {
     `);
 
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "ledger_direction_enum" AS ENUM ('debit', 'credit')
+      DO $$ BEGIN
+        CREATE TYPE "ledger_direction_enum" AS ENUM ('debit', 'credit');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "ledger_account_enum"
-        AS ENUM ('user_cash', 'escrow', 'platform_fee', 'coin_pool', 'investment_pool', 'external')
+      DO $$ BEGIN
+        CREATE TYPE "ledger_account_enum" AS ENUM ('user_cash', 'escrow', 'platform_fee', 'coin_pool', 'investment_pool', 'external');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "ledger_entries" (
@@ -43,10 +51,16 @@ export class CreateWalletTables1751100000000 implements MigrationInterface {
     await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_ledger_txn"    ON "ledger_entries" ("transactionId")`);
 
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "payment_intent_v2_type_enum"   AS ENUM ('deposit', 'withdrawal')
+      DO $$ BEGIN
+        CREATE TYPE "payment_intent_v2_type_enum" AS ENUM ('deposit', 'withdrawal');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "payment_intent_v2_status_enum" AS ENUM ('pending', 'processing', 'completed', 'failed')
+      DO $$ BEGIN
+        CREATE TYPE "payment_intent_v2_status_enum" AS ENUM ('pending', 'processing', 'completed', 'failed');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "payment_intents_v2" (

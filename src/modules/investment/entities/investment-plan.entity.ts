@@ -24,8 +24,8 @@ export class InvestmentPlan {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   cropId: string | null;
 
   @Field()
@@ -60,7 +60,7 @@ export class InvestmentPlan {
   @Column({ type: 'int' })
   unitsRemaining: number;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   @Column({ type: 'text', nullable: true })
   riskNotes: string | null;
 

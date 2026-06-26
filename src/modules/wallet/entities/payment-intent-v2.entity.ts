@@ -37,8 +37,8 @@ export class PaymentIntentV2 {
   @Column({ default: 'paystack' })
   provider: string;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   providerRef: string | null;
 
   @Field(() => PaymentIntentType)
@@ -57,8 +57,8 @@ export class PaymentIntentV2 {
   @Column({ unique: true })
   idempotencyKey: string;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'text', nullable: true })
   checkoutUrl: string | null;
 
   @Field()

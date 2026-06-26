@@ -52,8 +52,8 @@ export class MarketPricePoint {
   @Column()
   source: string;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   sourceUrl: string | null;
 
   @Field(() => PriceType)
@@ -64,28 +64,28 @@ export class MarketPricePoint {
   @Column({ type: 'bigint', nullable: true })
   volumeKg: number | null;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   qualityGrade: string | null;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'text', nullable: true })
   notes: string | null;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   ingestionJobId: string | null;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   fieldObservationId: string | null;
 
   @Field()
   @Column({ default: false })
   isSuperseded: boolean;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   supersededBy: string | null;
 
   @Field()

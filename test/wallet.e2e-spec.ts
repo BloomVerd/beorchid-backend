@@ -7,7 +7,8 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import * as request from 'supertest';
+import request from 'supertest';
+import { DataSource } from 'typeorm';
 import { Wallet, WalletOwnerType } from '../src/modules/wallet/entities/wallet.entity';
 import { LedgerEntry, LedgerDirection, LedgerAccount } from '../src/modules/wallet/entities/ledger-entry.entity';
 import { PaymentIntentV2, PaymentIntentStatus, PaymentIntentType } from '../src/modules/wallet/entities/payment-intent-v2.entity';
@@ -46,6 +47,7 @@ describe('Wallet (e2e)', () => {
   let ledgerRepo: ReturnType<typeof makeRepo>;
   let intentRepo: ReturnType<typeof makeRepo>;
   let farmerRepo: ReturnType<typeof makeRepo>;
+  let mockDataSource: any;
 
   beforeAll(async () => {
     walletRepo  = makeRepo();
@@ -55,12 +57,13 @@ describe('Wallet (e2e)', () => {
 
     const paymentService = {
       initializeTransaction: jest.fn().mockResolvedValue({ authorizationUrl: 'https://pay.example.com/abc' }),
+      verifyWebhookSignature: jest.fn().mockReturnValue(true),
     };
     const configService = {
       get: jest.fn().mockImplementation((k: string) => (k === 'PAYSTACK_SECRET_KEY' ? 'sk_test' : undefined)),
     };
 
-    const dataSource = {
+    mockDataSource = {
       transaction: jest.fn().mockImplementation(async (fn: any) =>
         fn({
           getRepository: (entity: any) => {
@@ -91,7 +94,7 @@ describe('Wallet (e2e)', () => {
         { provide: getRepositoryToken(LedgerEntry),     useValue: ledgerRepo  },
         { provide: getRepositoryToken(PaymentIntentV2), useValue: intentRepo  },
         { provide: getRepositoryToken(Farmer),          useValue: farmerRepo  },
-        { provide: 'DataSource',   useValue: dataSource   },
+        { provide: DataSource,     useValue: mockDataSource },
         { provide: PaymentService, useValue: paymentService },
         { provide: ConfigService,  useValue: configService  },
       ],
@@ -100,7 +103,7 @@ describe('Wallet (e2e)', () => {
       .useValue(passGuard)
       .compile();
 
-    app = moduleFixture.createNestApplication();
+    app = moduleFixture.createNestApplication({ rawBody: true });
     app.useGlobalPipes(new ValidationPipe());
     await app.init();
   });
@@ -141,7 +144,7 @@ describe('Wallet (e2e)', () => {
 
     expect(body.errors).toBeUndefined();
     expect(body.data.myLedger).toHaveLength(1);
-    expect(body.data.myLedger[0].direction).toBe('credit');
+    expect(body.data.myLedger[0].direction).toBe('CREDIT');
     expect(body.data.myLedger[0].amount).toBe(100000);
   });
 
@@ -163,7 +166,7 @@ describe('Wallet (e2e)', () => {
       .post('/graphql')
       .send({
         query: `mutation {
-          initiateDeposit(amount: 100000, idempotencyKey: "key-1") {
+          initiateDeposit(input: { amountPesewas: 100000, idempotencyKey: "key-1" }) {
             checkoutUrl intent { id status amount }
           }
         }`,
@@ -171,7 +174,7 @@ describe('Wallet (e2e)', () => {
 
     expect(body.errors).toBeUndefined();
     expect(body.data.initiateDeposit.checkoutUrl).toContain('https://');
-    expect(body.data.initiateDeposit.intent.status).toBe('pending');
+    expect(body.data.initiateDeposit.intent.status).toBe('PENDING');
   });
 
   // ── Paystack webhook — idempotency ────────────────────────────────────────
@@ -196,6 +199,6 @@ describe('Wallet (e2e)', () => {
 
     expect(status).toBe(200);
     // dataSource.transaction should NOT be called since intent is already COMPLETED
-    expect(dataSource).toBeDefined();
+    expect(mockDataSource.transaction).not.toHaveBeenCalled();
   });
 });

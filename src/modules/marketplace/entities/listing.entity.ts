@@ -54,7 +54,7 @@ export class Listing {
   @Column({ default: 'GHS' })
   currency: string;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
@@ -62,7 +62,7 @@ export class Listing {
   @Column({ type: 'enum', enum: ListingStatus, default: ListingStatus.DRAFT })
   status: ListingStatus;
 
-  @Field({ nullable: true })
+  @Field(() => Date, { nullable: true })
   @Column({ type: 'timestamptz', nullable: true })
   expiresAt: Date | null;
 

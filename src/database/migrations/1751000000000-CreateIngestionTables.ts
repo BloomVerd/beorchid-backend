@@ -5,12 +5,16 @@ export class CreateIngestionTables1751000000000 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "ingestion_job_type_enum"
-        AS ENUM ('csv_upload', 'json_upload', 'external_feed_run', 'forecast_import')
+      DO $$ BEGIN
+        CREATE TYPE "ingestion_job_type_enum" AS ENUM ('csv_upload', 'json_upload', 'external_feed_run', 'forecast_import');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "ingestion_job_status_enum"
-        AS ENUM ('pending', 'processing', 'completed', 'failed', 'partial')
+      DO $$ BEGIN
+        CREATE TYPE "ingestion_job_status_enum" AS ENUM ('pending', 'processing', 'completed', 'failed', 'partial');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
 
     await queryRunner.query(`
@@ -33,7 +37,10 @@ export class CreateIngestionTables1751000000000 implements MigrationInterface {
     `);
 
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "feed_format_enum" AS ENUM ('json', 'csv')
+      DO $$ BEGIN
+        CREATE TYPE "feed_format_enum" AS ENUM ('json', 'csv');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
 
     await queryRunner.query(`

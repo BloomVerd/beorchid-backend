@@ -5,8 +5,10 @@ export class CreateWatchlistTables1751500000000 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "watchlist_entity_type_enum"
-        AS ENUM ('crop', 'coin', 'listing', 'plan')
+      DO $$ BEGIN
+        CREATE TYPE "watchlist_entity_type_enum" AS ENUM ('crop', 'coin', 'listing', 'plan');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "watchlists" (

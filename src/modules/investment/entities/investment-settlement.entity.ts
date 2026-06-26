@@ -29,7 +29,7 @@ export class InvestmentSettlement {
   @CreateDateColumn()
   settledAt: Date;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   @Column({ type: 'text', nullable: true })
   notes: string | null;
 }

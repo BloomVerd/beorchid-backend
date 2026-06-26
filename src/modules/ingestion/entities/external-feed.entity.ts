@@ -37,12 +37,12 @@ export class ExternalFeed {
   @Column({ type: 'jsonb' })
   fieldMap: Record<string, string>;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   cropId: string | null;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   region: string | null;
 
   @Field()
@@ -61,12 +61,12 @@ export class ExternalFeed {
   @Column({ default: true })
   isActive: boolean;
 
-  @Field({ nullable: true })
+  @Field(() => Date, { nullable: true })
   @Column({ type: 'timestamptz', nullable: true })
   lastRunAt: Date | null;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   lastRunStatus: string | null;
 
   @Field()

@@ -31,8 +31,8 @@ export class Coin {
   @Column({ unique: true })
   symbol: string;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   cropId: string | null;
 
   @Field(() => Int)

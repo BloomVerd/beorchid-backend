@@ -5,8 +5,10 @@ export class CreateCoinTables1751400000000 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "coin_status_enum"
-        AS ENUM ('draft', 'active', 'paused', 'delisted')
+      DO $$ BEGIN
+        CREATE TYPE "coin_status_enum" AS ENUM ('draft', 'active', 'paused', 'delisted');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "coins" (
@@ -49,7 +51,10 @@ export class CreateCoinTables1751400000000 implements MigrationInterface {
     `);
 
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "coin_side_enum" AS ENUM ('buy', 'sell')
+      DO $$ BEGIN
+        CREATE TYPE "coin_side_enum" AS ENUM ('buy', 'sell');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "coin_transactions" (

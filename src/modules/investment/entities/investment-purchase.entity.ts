@@ -55,8 +55,8 @@ export class InvestmentPurchase {
   @Column({ type: 'bigint', nullable: true })
   payoutAmount: number | null;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   settlementLedgerRef: string | null;
 
   @Field()

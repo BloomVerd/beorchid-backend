@@ -35,8 +35,8 @@ export class DataIngestionJob {
   @Column({ type: 'enum', enum: IngestionJobType })
   type: IngestionJobType;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   feedId: string | null;
 
   @Field()
@@ -67,15 +67,15 @@ export class DataIngestionJob {
   @Column({ type: 'jsonb', nullable: true })
   errors: Array<{ row: number; field: string; message: string }> | null;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   storageRef: string | null;
 
-  @Field({ nullable: true })
+  @Field(() => Date, { nullable: true })
   @Column({ type: 'timestamptz', nullable: true })
   startedAt: Date | null;
 
-  @Field({ nullable: true })
+  @Field(() => Date, { nullable: true })
   @Column({ type: 'timestamptz', nullable: true })
   completedAt: Date | null;
 

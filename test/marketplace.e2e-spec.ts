@@ -8,7 +8,8 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import * as request from 'supertest';
+import request from 'supertest';
+import { DataSource } from 'typeorm';
 import { Listing, ListingStatus } from '../src/modules/marketplace/entities/listing.entity';
 import { Offer, OfferStatus } from '../src/modules/marketplace/entities/offer.entity';
 import { Deal, DealStatus } from '../src/modules/marketplace/entities/deal.entity';
@@ -17,6 +18,7 @@ import { MarketplaceResolver } from '../src/modules/marketplace/marketplace.reso
 import { WalletService } from '../src/modules/wallet/wallet.service';
 import { NotificationsService } from '../src/modules/notifications/notifications.service';
 import { GqlJwtAuthGuard } from '../src/common/guards';
+import { RolesGuard } from '../src/modules/roles';
 
 // Shared mock for Guards — bypass JWT auth in e2e tests
 const passGuard = { canActivate: () => true };
@@ -101,12 +103,14 @@ describe('Marketplace (e2e)', () => {
         { provide: getRepositoryToken(Listing), useValue: listingRepo },
         { provide: getRepositoryToken(Offer),   useValue: offerRepo   },
         { provide: getRepositoryToken(Deal),    useValue: dealRepo    },
-        { provide: 'DataSource',                useValue: dataSource  },
+        { provide: DataSource,                  useValue: dataSource  },
         { provide: WalletService,        useValue: walletService        },
         { provide: NotificationsService, useValue: notificationsService },
       ],
     })
       .overrideGuard(GqlJwtAuthGuard)
+      .useValue(passGuard)
+      .overrideGuard(RolesGuard)
       .useValue(passGuard)
       .compile();
 
@@ -142,12 +146,11 @@ describe('Marketplace (e2e)', () => {
       .send({
         query: `mutation {
           createListing(input: {
-            farmId: "farm-1"
+            farmId: "00000000-0000-0000-0000-000000000001"
             crop: "maize"
             region: "ashanti"
             acreage: 5
             askingPrice: 200000
-            currency: "GHS"
           }) {
             id status sellerId crop
           }
@@ -155,7 +158,7 @@ describe('Marketplace (e2e)', () => {
       });
 
     expect(body.errors).toBeUndefined();
-    expect(body.data.createListing.status).toBe('open');
+    expect(body.data.createListing.status).toBe('OPEN');
     expect(body.data.createListing.sellerId).toBe(SELLER_ID);
   });
 
@@ -187,7 +190,7 @@ describe('Marketplace (e2e)', () => {
       });
 
     expect(body.errors).toBeUndefined();
-    expect(body.data.makeOffer.status).toBe('pending');
+    expect(body.data.makeOffer.status).toBe('PENDING');
     expect(listingRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({ status: ListingStatus.UNDER_OFFER }),
     );
@@ -224,7 +227,7 @@ describe('Marketplace (e2e)', () => {
       });
 
     expect(body.errors).toBeUndefined();
-    expect(body.data.acceptOffer.status).toBe('in_escrow');
+    expect(body.data.acceptOffer.status).toBe('IN_ESCROW');
     expect(body.data.acceptOffer.amount).toBe(180000);
   });
 
@@ -244,7 +247,7 @@ describe('Marketplace (e2e)', () => {
       .send({ query: `mutation { withdrawOffer(offerId: "offer-1") { id status } }` });
 
     expect(body.errors).toBeUndefined();
-    expect(body.data.withdrawOffer.status).toBe('withdrawn');
+    expect(body.data.withdrawOffer.status).toBe('WITHDRAWN');
   });
 
   // ── listings query ────────────────────────────────────────────────────────

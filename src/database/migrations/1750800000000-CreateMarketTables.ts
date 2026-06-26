@@ -17,8 +17,10 @@ export class CreateMarketTables1750800000000 implements MigrationInterface {
     `);
 
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "price_type_enum"
-        AS ENUM ('farm_gate', 'wholesale', 'retail', 'auction', 'index')
+      DO $$ BEGIN
+        CREATE TYPE "price_type_enum" AS ENUM ('farm_gate', 'wholesale', 'retail', 'auction', 'index');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
 
     await queryRunner.query(`
@@ -61,8 +63,10 @@ export class CreateMarketTables1750800000000 implements MigrationInterface {
     `);
 
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "insight_type_enum"
-        AS ENUM ('supply_demand', 'seasonality', 'volatility', 'regional_comparison', 'top_crops', 'report')
+      DO $$ BEGIN
+        CREATE TYPE "insight_type_enum" AS ENUM ('supply_demand', 'seasonality', 'volatility', 'regional_comparison', 'top_crops', 'report');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
 
     await queryRunner.query(`

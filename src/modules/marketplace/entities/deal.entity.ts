@@ -48,8 +48,8 @@ export class Deal {
   @Column({ type: 'enum', enum: DealStatus, default: DealStatus.PENDING_PAYMENT })
   status: DealStatus;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   escrowLedgerRef: string | null;
 
   @Field()

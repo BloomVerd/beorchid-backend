@@ -5,7 +5,10 @@ export class CreateOrganizationTables1750700000000 implements MigrationInterface
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "kyc_status_enum" AS ENUM ('pending', 'approved', 'rejected')
+      DO $$ BEGIN
+        CREATE TYPE "kyc_status_enum" AS ENUM ('pending', 'approved', 'rejected');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
     `);
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "organizations" (

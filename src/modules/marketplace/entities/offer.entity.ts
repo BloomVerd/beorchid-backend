@@ -41,7 +41,7 @@ export class Offer {
   @Column({ default: 'GHS' })
   currency: string;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   @Column({ type: 'text', nullable: true })
   message: string | null;
 
@@ -49,11 +49,11 @@ export class Offer {
   @Column({ type: 'enum', enum: OfferStatus, default: OfferStatus.PENDING })
   status: OfferStatus;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   parentOfferId: string | null;
 
-  @Field({ nullable: true })
+  @Field(() => Date, { nullable: true })
   @Column({ type: 'timestamptz', nullable: true })
   expiresAt: Date | null;
 

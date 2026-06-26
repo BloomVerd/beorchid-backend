@@ -47,7 +47,7 @@ export class CoinTransaction {
   @CreateDateColumn()
   executedAt: Date;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   ledgerRef: string | null;
 }

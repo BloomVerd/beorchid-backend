@@ -69,7 +69,7 @@ export class InvestmentResolver {
   settleInvestmentPlan(
     @Args('planId', { type: () => ID }) planId: string,
     @Args('actualProfitPerUnit', { type: () => Number }) actualProfitPerUnit: number,
-    @Args('notes', { nullable: true }) notes: string | undefined,
+    @Args('notes', { nullable: true, type: () => String }) notes: string | undefined,
     @CurrentFarmer() user: Farmer,
   ): Promise<InvestmentSettlement> {
     return this.investmentService.settle(planId, actualProfitPerUnit, notes, user.id);
