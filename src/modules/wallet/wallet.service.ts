@@ -89,10 +89,10 @@ export class WalletService {
       lock: { mode: 'pessimistic_write' },
     });
     if (!wallet) throw new NotFoundException('Wallet not found');
-    if (wallet.availableBalance < amount)
+    if (Number(wallet.availableBalance) < Number(amount))
       throw new BadRequestException('Insufficient balance');
 
-    wallet.availableBalance = Number(wallet.availableBalance) - amount;
+    wallet.availableBalance = Number(wallet.availableBalance) - Number(amount);
     await repo.save(wallet);
     await ledgerRepo.save(
       ledgerRepo.create({
@@ -121,7 +121,7 @@ export class WalletService {
     });
     if (!wallet) throw new NotFoundException('Wallet not found');
 
-    wallet.availableBalance = Number(wallet.availableBalance) + amount;
+    wallet.availableBalance = Number(wallet.availableBalance) + Number(amount);
     await repo.save(wallet);
     await ledgerRepo.save(
       ledgerRepo.create({
@@ -141,10 +141,10 @@ export class WalletService {
       lock: { mode: 'pessimistic_write' },
     });
     if (!wallet) throw new NotFoundException('Wallet not found');
-    if (wallet.availableBalance < amount)
+    if (Number(wallet.availableBalance) < Number(amount))
       throw new BadRequestException('Insufficient balance');
-    wallet.availableBalance = Number(wallet.availableBalance) - amount;
-    wallet.lockedBalance = Number(wallet.lockedBalance) + amount;
+    wallet.availableBalance = Number(wallet.availableBalance) - Number(amount);
+    wallet.lockedBalance = Number(wallet.lockedBalance) + Number(amount);
     await repo.save(wallet);
   }
 
@@ -155,8 +155,8 @@ export class WalletService {
       lock: { mode: 'pessimistic_write' },
     });
     if (!wallet) throw new NotFoundException('Wallet not found');
-    wallet.lockedBalance = Math.max(0, Number(wallet.lockedBalance) - amount);
-    wallet.availableBalance = Number(wallet.availableBalance) + amount;
+    wallet.lockedBalance = Math.max(0, Number(wallet.lockedBalance) - Number(amount));
+    wallet.availableBalance = Number(wallet.availableBalance) + Number(amount);
     await repo.save(wallet);
   }
 

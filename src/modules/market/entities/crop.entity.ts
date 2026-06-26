@@ -28,11 +28,11 @@ export class Crop {
   unit: string;
 
   @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   category: string | null;
 
   @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   region: string | null;
 
   @Field(() => Object, { nullable: true })
