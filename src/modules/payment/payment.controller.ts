@@ -9,6 +9,9 @@ import {
 import { PaymentService } from './payment.service';
 import { SubscriptionService } from './subscription.service';
 import { WalletService } from '../wallet/wallet.service';
+import { PaymentTransaction } from './entities/payment-transaction.entity';
+import { Repository } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
 
 @Controller('api/payment')
 export class PaymentController {
@@ -16,6 +19,8 @@ export class PaymentController {
     private readonly paymentService: PaymentService,
     private readonly subscriptionService: SubscriptionService,
     private readonly walletService: WalletService,
+    @InjectRepository(PaymentTransaction)
+    private readonly transactionRepo: Repository<PaymentTransaction>,
   ) {}
 
   @Post('webhook')
@@ -39,8 +44,17 @@ export class PaymentController {
     };
 
     if (event.event === 'charge.success') {
-      await this.subscriptionService.activateSubscription(event.data.reference);
-      await this.walletService.handleDepositWebhook(event.data.reference);
+      const transaction = await this.transactionRepo.findOne({
+        where: { paystackReference: event.data.reference },
+      });
+
+      if (transaction) {
+        await this.subscriptionService.activateSubscription(
+          event.data.reference,
+        );
+      } else {
+        await this.walletService.handleDepositWebhook(event.data.reference);
+      }
     }
 
     return { ok: true };
