@@ -4,6 +4,8 @@ import { PaymentController } from './payment.controller';
 import { PaymentService } from './payment.service';
 import { SubscriptionService } from './subscription.service';
 import { WalletService } from '../wallet/wallet.service';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { PaymentTransaction } from './entities/payment-transaction.entity';
 
 const mockPaymentService = {
   verifyWebhookSignature: jest.fn(),
@@ -23,11 +25,28 @@ const makeRawBodyReq = (payload: object, signature: string) => ({
 
 describe('PaymentController', () => {
   let controller: PaymentController;
+  let transactionRepo: {
+    findOne: jest.Mock;
+    create: jest.Mock;
+    save: jest.Mock;
+    createQueryBuilder: jest.Mock;
+  };
 
   beforeEach(async () => {
+    transactionRepo = {
+      findOne: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+      createQueryBuilder: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [PaymentController],
       providers: [
+        {
+          provide: getRepositoryToken(PaymentTransaction),
+          useValue: transactionRepo,
+        },
         { provide: PaymentService, useValue: mockPaymentService },
         { provide: WalletService, useValue: mockWalletService },
         { provide: SubscriptionService, useValue: mockSubscriptionService },
@@ -45,6 +64,11 @@ describe('PaymentController', () => {
         event: 'charge.success',
         data: { reference: 'ref_abc' },
       };
+
+      transactionRepo.findOne.mockResolvedValue({ id: 'trans-id' });
+      transactionRepo.create.mockReturnValue({ id: 'trans-id' });
+      transactionRepo.save.mockResolvedValue({ id: 'trans-id' });
+
       const req = makeRawBodyReq(payload, 'valid_sig');
       mockPaymentService.verifyWebhookSignature.mockReturnValue(true);
       mockSubscriptionService.activateSubscription.mockResolvedValue(undefined);
