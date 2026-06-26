@@ -14,6 +14,7 @@ import { FarmerModule } from '../farmer/farmer.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { EmailModule } from '../email/email.module';
 import { SmsModule } from '../sms/sms.module';
+import { WalletModule } from '../wallet/wallet.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { SmsModule } from '../sms/sms.module';
     NotificationsModule,
     EmailModule,
     SmsModule,
+    WalletModule,
     TypeOrmModule.forFeature([
       SubscriptionPlan,
       FarmerSubscription,

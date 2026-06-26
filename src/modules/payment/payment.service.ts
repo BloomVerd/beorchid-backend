@@ -2,7 +2,7 @@ import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 
-interface PaystackInitResponse {
+export interface PaystackInitResponse {
   status: boolean;
   message: string;
   data: {
@@ -42,7 +42,12 @@ export class PaymentService {
     metadata: Record<string, unknown> = {},
     callbackUrl?: string,
   ): Promise<{ authorizationUrl: string; accessCode: string }> {
-    const body: Record<string, unknown> = { email, amount, reference, metadata };
+    const body: Record<string, unknown> = {
+      email,
+      amount,
+      reference,
+      metadata,
+    };
     if (callbackUrl) body.callback_url = callbackUrl;
 
     const response = await fetch(`${this.baseUrl}/transaction/initialize`, {
@@ -68,7 +73,9 @@ export class PaymentService {
     };
   }
 
-  async verifyTransaction(reference: string): Promise<PaystackVerifyResponse['data']> {
+  async verifyTransaction(
+    reference: string,
+  ): Promise<PaystackVerifyResponse['data']> {
     const response = await fetch(
       `${this.baseUrl}/transaction/verify/${encodeURIComponent(reference)}`,
       {

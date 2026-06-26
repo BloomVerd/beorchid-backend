@@ -6,13 +6,13 @@ import { PaymentIntentV2 } from './entities/payment-intent-v2.entity';
 import { WalletService } from './wallet.service';
 import { WalletResolver } from './wallet.resolver';
 import { WalletController } from './wallet.controller';
-import { PaymentModule } from '../payment/payment.module';
+// import { PaymentModule } from '../payment/payment.module';
 import { Farmer } from '../farmer/entities/farmer.entity';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Wallet, LedgerEntry, PaymentIntentV2, Farmer]),
-    PaymentModule,
+    // PaymentModule,
   ],
   providers: [WalletService, WalletResolver],
   controllers: [WalletController],

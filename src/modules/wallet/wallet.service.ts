@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -18,11 +19,18 @@ import {
   PaymentIntentType,
   PaymentIntentStatus,
 } from './entities/payment-intent-v2.entity';
-import { PaymentService } from '../payment/payment.service';
+import {
+  // PaymentService,
+  PaystackInitResponse,
+} from '../payment/payment.service';
 import { Farmer } from '../farmer/entities/farmer.entity';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class WalletService {
+  private readonly secretKey: string;
+  private readonly baseUrl = 'https://api.paystack.co';
+
   constructor(
     @InjectRepository(Wallet)
     private readonly walletRepo: Repository<Wallet>,
@@ -33,8 +41,12 @@ export class WalletService {
     @InjectRepository(Farmer)
     private readonly farmerRepo: Repository<Farmer>,
     private readonly dataSource: DataSource,
-    private readonly paymentService: PaymentService,
-  ) {}
+    // private readonly paymentService: PaymentService,
+    private readonly configService: ConfigService,
+  ) {
+    this.secretKey =
+      this.configService.get<string>('PAYSTACK_SECRET_KEY') ?? '';
+  }
 
   async getOrCreateWallet(
     ownerId: string,
@@ -148,6 +160,44 @@ export class WalletService {
     await repo.save(wallet);
   }
 
+  async initializeTransaction(
+    email: string,
+    amount: number,
+    reference: string,
+    metadata: Record<string, unknown> = {},
+    callbackUrl?: string,
+  ): Promise<{ authorizationUrl: string; accessCode: string }> {
+    const body: Record<string, unknown> = {
+      email,
+      amount,
+      reference,
+      metadata,
+    };
+    if (callbackUrl) body.callback_url = callbackUrl;
+
+    const response = await fetch(`${this.baseUrl}/transaction/initialize`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.secretKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new InternalServerErrorException(
+        `Paystack initialization failed: ${body}`,
+      );
+    }
+
+    const result = (await response.json()) as PaystackInitResponse;
+    return {
+      authorizationUrl: result.data.authorization_url,
+      accessCode: result.data.access_code,
+    };
+  }
+
   async initiateDeposit(
     userId: string,
     amountPesewas: number,
@@ -164,13 +214,12 @@ export class WalletService {
     if (!farmer) throw new NotFoundException('User not found');
 
     const reference = `dep_${crypto.randomBytes(8).toString('hex')}`;
-    const { authorizationUrl } =
-      await this.paymentService.initializeTransaction(
-        farmer.email,
-        amountPesewas,
-        reference,
-        { walletId: wallet.id, userId },
-      );
+    const { authorizationUrl } = await this.initializeTransaction(
+      farmer.email,
+      amountPesewas,
+      reference,
+      { walletId: wallet.id, userId },
+    );
 
     const intent = await this.intentRepo.save(
       this.intentRepo.create({
