@@ -146,7 +146,7 @@ describe('Marketplace (e2e)', () => {
       .send({
         query: `mutation {
           createListing(input: {
-            farmId: "00000000-0000-0000-0000-000000000001"
+            farmId: "550e8400-e29b-41d4-a716-446655440000"
             crop: "maize"
             region: "ashanti"
             acreage: 5
