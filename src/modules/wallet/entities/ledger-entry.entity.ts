@@ -4,7 +4,7 @@ import {
   Entity,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { Field, ID, Int, ObjectType, registerEnumType } from '@nestjs/graphql';
+import { Field, Float, ID, ObjectType, registerEnumType } from '@nestjs/graphql';
 
 export enum LedgerDirection {
   DEBIT = 'debit',
@@ -42,7 +42,7 @@ export class LedgerEntry {
   @Column({ type: 'enum', enum: LedgerDirection })
   direction: LedgerDirection;
 
-  @Field(() => Int)
+  @Field(() => Float)
   @Column({ type: 'bigint' })
   amount: number;
 

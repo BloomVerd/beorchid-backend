@@ -5,7 +5,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Field, ID, Int, ObjectType, registerEnumType } from '@nestjs/graphql';
+import { Field, Float, ID, ObjectType, registerEnumType } from '@nestjs/graphql';
 
 export enum WalletOwnerType {
   USER = 'user',
@@ -33,11 +33,11 @@ export class Wallet {
   @Column({ default: 'GHS' })
   currency: string;
 
-  @Field(() => Int)
+  @Field(() => Float)
   @Column({ type: 'bigint', default: 0 })
   availableBalance: number;
 
-  @Field(() => Int)
+  @Field(() => Float)
   @Column({ type: 'bigint', default: 0 })
   lockedBalance: number;
 
