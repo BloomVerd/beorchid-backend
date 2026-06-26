@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Field, ID, ObjectType } from '@nestjs/graphql';
+import { PriceDataPoint } from '../types/crop-price-series.type';
 
 @ObjectType()
 @Entity('crops')
@@ -26,9 +27,20 @@ export class Crop {
   @Column({ default: 'per 100kg bag' })
   unit: string;
 
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  category: string | null;
+
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  region: string | null;
+
   @Field(() => Object, { nullable: true })
   @Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, unknown> | null;
+
+  @Field(() => [PriceDataPoint], { nullable: true })
+  recentPrices?: PriceDataPoint[];
 
   @Field()
   @CreateDateColumn()

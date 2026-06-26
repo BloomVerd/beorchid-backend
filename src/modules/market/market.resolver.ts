@@ -1,10 +1,11 @@
-import { Resolver, Query, Mutation, Args, ID } from '@nestjs/graphql';
+import { Resolver, Query, Mutation, Args, ID, ResolveField, Parent } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { MarketService } from './market.service';
 import { Crop } from './entities/crop.entity';
 import { MarketPricePoint } from './entities/market-price-point.entity';
 import { PriceForecast } from './entities/price-forecast.entity';
 import { MarketSurveyInsight, InsightType } from './entities/market-survey-insight.entity';
+import { PriceDataPoint } from './types/crop-price-series.type';
 import { PublishInsightInput } from './inputs/publish-insight.input';
 import { PublishForecastInput } from './inputs/publish-forecast.input';
 import { GqlJwtAuthGuard } from 'src/common/guards';
@@ -12,7 +13,7 @@ import { RolesGuard, Roles } from '../roles';
 import { CurrentFarmer } from 'src/common/decorators';
 import { Farmer } from '../farmer/entities/farmer.entity';
 
-@Resolver()
+@Resolver(() => Crop)
 export class MarketResolver {
   constructor(private readonly marketService: MarketService) {}
 
@@ -59,6 +60,11 @@ export class MarketResolver {
     @Args('id', { type: () => ID }) id: string,
   ): Promise<MarketSurveyInsight> {
     return this.marketService.getInsightById(id);
+  }
+
+  @ResolveField('recentPrices', () => [PriceDataPoint])
+  recentPrices(@Parent() crop: Crop): Promise<PriceDataPoint[]> {
+    return this.marketService.getRecentPricesForCrop(crop.id);
   }
 
   @Query(() => [Crop])

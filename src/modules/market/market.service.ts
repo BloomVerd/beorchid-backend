@@ -7,6 +7,7 @@ import { PriceForecast } from './entities/price-forecast.entity';
 import { MarketSurveyInsight, InsightType } from './entities/market-survey-insight.entity';
 import { PublishInsightInput } from './inputs/publish-insight.input';
 import { PublishForecastInput } from './inputs/publish-forecast.input';
+import { PriceDataPoint } from './types/crop-price-series.type';
 
 @Injectable()
 export class MarketService {
@@ -100,6 +101,21 @@ export class MarketService {
 
   async createPricePoint(data: Partial<MarketPricePoint>): Promise<MarketPricePoint> {
     return this.pricePointRepo.save(this.pricePointRepo.create(data));
+  }
+
+  async getRecentPricesForCrop(cropId: string, limit = 24): Promise<PriceDataPoint[]> {
+    const pts = await this.pricePointRepo.find({
+      where: { cropId, isSuperseded: false },
+      order: { observedAt: 'ASC' },
+      take: limit,
+    });
+    return pts.map(p => ({
+      observedAt: p.observedAt,
+      price: Number(p.price),
+      currency: p.currency,
+      priceType: p.priceType,
+      source: p.source,
+    }));
   }
 
   async upsertCrop(name: string, slug: string, unit?: string): Promise<Crop> {
