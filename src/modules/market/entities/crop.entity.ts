@@ -27,11 +27,11 @@ export class Crop {
   @Column({ default: 'per 100kg bag' })
   unit: string;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   @Column({ type: 'varchar', nullable: true })
   category: string | null;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   @Column({ type: 'varchar', nullable: true })
   region: string | null;
 
