@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThanOrEqual } from 'typeorm';
+import { Repository, MoreThanOrEqual, Between } from 'typeorm';
 import { Farmer } from '../farmer/entities/farmer.entity';
 import { Deal } from '../marketplace/entities/deal.entity';
 import { Offer } from '../marketplace/entities/offer.entity';
@@ -35,23 +35,66 @@ export class AdminService {
   }
 
   async getMetrics(): Promise<AdminMetrics> {
-    const deals = await this.dealRepo.find();
-    const gmv = deals.reduce((s, d) => s + Number(d.amount), 0);
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
 
-    const purchases = await this.purchaseRepo.find({ where: { status: PurchaseStatus.ACTIVE } });
-    const aum = purchases.reduce((s, p) => s + Number(p.principal), 0);
-    const activeInvestments = purchases.length;
+    const pct = (curr: number, prev: number): number | null =>
+      prev === 0 ? null : +((curr - prev) / prev * 100).toFixed(1);
 
-    const coinTxns = await this.coinTxnRepo.find();
-    const coinVolume = coinTxns
-      .filter(t => t.side === CoinSide.BUY)
-      .reduce((s, t) => s + Number(t.grossAmount), 0);
+    const [
+      allDeals, activePurchases, allCoinTxns, totalListings, totalUsers,
+      curDeals, prevDeals,
+      curPurchases, prevPurchases,
+      curCoinTxns, prevCoinTxns,
+      curListings, prevListings,
+      curUsers, prevUsers,
+    ] = await Promise.all([
+      this.dealRepo.find(),
+      this.purchaseRepo.find({ where: { status: PurchaseStatus.ACTIVE } }),
+      this.coinTxnRepo.find(),
+      this.listingRepo.count(),
+      this.farmerRepo.count(),
+      this.dealRepo.find({ where: { createdAt: Between(weekAgo, now) } }),
+      this.dealRepo.find({ where: { createdAt: Between(twoWeeksAgo, weekAgo) } }),
+      this.purchaseRepo.find({ where: { createdAt: Between(weekAgo, now) } }),
+      this.purchaseRepo.find({ where: { createdAt: Between(twoWeeksAgo, weekAgo) } }),
+      this.coinTxnRepo.find({ where: { createdAt: Between(weekAgo, now) } }),
+      this.coinTxnRepo.find({ where: { createdAt: Between(twoWeeksAgo, weekAgo) } }),
+      this.listingRepo.count({ where: { createdAt: Between(weekAgo, now) } }),
+      this.listingRepo.count({ where: { createdAt: Between(twoWeeksAgo, weekAgo) } }),
+      this.farmerRepo.count({ where: { createdAt: Between(weekAgo, now) } }),
+      this.farmerRepo.count({ where: { createdAt: Between(twoWeeksAgo, weekAgo) } }),
+    ]);
 
-    const totalListings = await this.listingRepo.count();
-    const totalDeals = deals.length;
-    const totalUsers = await this.farmerRepo.count();
+    const gmv = allDeals.reduce((s, d) => s + Number(d.amount), 0);
+    const aum = activePurchases.reduce((s, p) => s + Number(p.principal), 0);
+    const activeInvestments = activePurchases.length;
+    const coinVolume = allCoinTxns.filter(t => t.side === CoinSide.BUY).reduce((s, t) => s + Number(t.grossAmount), 0);
+    const totalDeals = allDeals.length;
 
-    return { gmv, aum, coinVolume, activeInvestments, totalListings, totalDeals, totalUsers };
+    return {
+      gmv, aum, coinVolume, activeInvestments, totalListings, totalDeals, totalUsers,
+      gmvDelta: pct(
+        curDeals.reduce((s, d) => s + Number(d.amount), 0),
+        prevDeals.reduce((s, d) => s + Number(d.amount), 0),
+      ),
+      aumDelta: pct(
+        curPurchases.reduce((s, p) => s + Number(p.principal), 0),
+        prevPurchases.reduce((s, p) => s + Number(p.principal), 0),
+      ),
+      coinVolumeDelta: pct(
+        curCoinTxns.filter(t => t.side === CoinSide.BUY).reduce((s, t) => s + Number(t.grossAmount), 0),
+        prevCoinTxns.filter(t => t.side === CoinSide.BUY).reduce((s, t) => s + Number(t.grossAmount), 0),
+      ),
+      activeInvestmentsDelta: pct(
+        curPurchases.filter(p => p.status === PurchaseStatus.ACTIVE).length,
+        prevPurchases.filter(p => p.status === PurchaseStatus.ACTIVE).length,
+      ),
+      totalListingsDelta: pct(curListings, prevListings),
+      totalDealsDelta: pct(curDeals.length, prevDeals.length),
+      totalUsersDelta: pct(curUsers, prevUsers),
+    };
   }
 
   getAuditLog(entity?: string, from?: Date, to?: Date): Promise<AuditLog[]> {
