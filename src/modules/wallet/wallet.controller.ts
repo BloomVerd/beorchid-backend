@@ -25,7 +25,10 @@ export class WalletController {
     const rawBody: Buffer | undefined = req.rawBody as Buffer | undefined;
     if (!rawBody) throw new UnauthorizedException('Missing raw body');
 
-    const valid = this.paymentService.verifyWebhookSignature(rawBody, signature);
+    const valid = this.paymentService.verifyWebhookSignature(
+      rawBody,
+      signature,
+    );
     if (!valid) throw new UnauthorizedException('Invalid webhook signature');
 
     const event = JSON.parse(rawBody.toString()) as {

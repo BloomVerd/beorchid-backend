@@ -8,12 +8,14 @@ import {
 } from '@nestjs/common';
 import { PaymentService } from './payment.service';
 import { SubscriptionService } from './subscription.service';
+import { WalletService } from '../wallet/wallet.service';
 
 @Controller('api/payment')
 export class PaymentController {
   constructor(
     private readonly paymentService: PaymentService,
     private readonly subscriptionService: SubscriptionService,
+    private readonly walletService: WalletService,
   ) {}
 
   @Post('webhook')
@@ -38,6 +40,7 @@ export class PaymentController {
 
     if (event.event === 'charge.success') {
       await this.subscriptionService.activateSubscription(event.data.reference);
+      await this.walletService.handleDepositWebhook(event.data.reference);
     }
 
     return { ok: true };
