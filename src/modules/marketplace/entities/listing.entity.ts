@@ -5,7 +5,9 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Field, ID, Int, ObjectType, registerEnumType } from '@nestjs/graphql';
+import { Field, Float, ID, Int, ObjectType, registerEnumType } from '@nestjs/graphql';
+import { ImageData } from '../../farm/entities/image-data.entity';
+import { FarmHealth } from '../../health/entities/farm-health.entity';
 
 export enum ListingStatus {
   DRAFT = 'draft',
@@ -73,4 +75,16 @@ export class Listing {
   @Field()
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @Field(() => Float, { nullable: true })
+  lat?: number | null;
+
+  @Field(() => Float, { nullable: true })
+  lon?: number | null;
+
+  @Field(() => [ImageData], { nullable: true })
+  farmImages?: ImageData[];
+
+  @Field(() => FarmHealth, { nullable: true })
+  farmHealth?: FarmHealth | null;
 }

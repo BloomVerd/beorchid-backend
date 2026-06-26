@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Not, Repository } from 'typeorm';
+import { DataSource, LessThanOrEqual, Not, Repository } from 'typeorm';
 import * as crypto from 'crypto';
 import { Listing, ListingStatus } from './entities/listing.entity';
 import { Offer, OfferStatus } from './entities/offer.entity';
@@ -39,11 +39,12 @@ export class MarketplaceService {
     return this.listingRepo.save(listing);
   }
 
-  listListings(crop?: string, region?: string, status?: ListingStatus): Promise<Listing[]> {
+  listListings(crop?: string, region?: string, status?: ListingStatus, maxPrice?: number): Promise<Listing[]> {
     const where: any = {};
     if (crop) where.crop = crop;
     if (region) where.region = region;
     if (status) where.status = status;
+    if (maxPrice) where.askingPrice = LessThanOrEqual(maxPrice);
     return this.listingRepo.find({ where, order: { createdAt: 'DESC' } });
   }
 
