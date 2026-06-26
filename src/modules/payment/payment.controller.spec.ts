@@ -3,9 +3,14 @@ import { UnauthorizedException } from '@nestjs/common';
 import { PaymentController } from './payment.controller';
 import { PaymentService } from './payment.service';
 import { SubscriptionService } from './subscription.service';
+import { WalletService } from '../wallet/wallet.service';
 
 const mockPaymentService = {
   verifyWebhookSignature: jest.fn(),
+};
+const mockWalletService = {
+  initializeTransaction: jest.fn(),
+  handleDepositWebhook: jest.fn(),
 };
 const mockSubscriptionService = {
   activateSubscription: jest.fn(),
@@ -24,6 +29,7 @@ describe('PaymentController', () => {
       controllers: [PaymentController],
       providers: [
         { provide: PaymentService, useValue: mockPaymentService },
+        { provide: WalletService, useValue: mockWalletService },
         { provide: SubscriptionService, useValue: mockSubscriptionService },
       ],
     }).compile();
@@ -35,7 +41,10 @@ describe('PaymentController', () => {
 
   describe('handleWebhook', () => {
     it('activates subscription on charge.success event', async () => {
-      const payload = { event: 'charge.success', data: { reference: 'ref_abc' } };
+      const payload = {
+        event: 'charge.success',
+        data: { reference: 'ref_abc' },
+      };
       const req = makeRawBodyReq(payload, 'valid_sig');
       mockPaymentService.verifyWebhookSignature.mockReturnValue(true);
       mockSubscriptionService.activateSubscription.mockResolvedValue(undefined);
@@ -43,22 +52,32 @@ describe('PaymentController', () => {
       const result = await controller.handleWebhook(req as any, 'valid_sig');
 
       expect(result).toEqual({ ok: true });
-      expect(mockSubscriptionService.activateSubscription).toHaveBeenCalledWith('ref_abc');
+      expect(mockSubscriptionService.activateSubscription).toHaveBeenCalledWith(
+        'ref_abc',
+      );
     });
 
     it('returns ok:true for unhandled event types (does not call activateSubscription)', async () => {
-      const payload = { event: 'transfer.success', data: { reference: 'ref_xyz' } };
+      const payload = {
+        event: 'transfer.success',
+        data: { reference: 'ref_xyz' },
+      };
       const req = makeRawBodyReq(payload, 'valid_sig');
       mockPaymentService.verifyWebhookSignature.mockReturnValue(true);
 
       const result = await controller.handleWebhook(req as any, 'valid_sig');
 
       expect(result).toEqual({ ok: true });
-      expect(mockSubscriptionService.activateSubscription).not.toHaveBeenCalled();
+      expect(
+        mockSubscriptionService.activateSubscription,
+      ).not.toHaveBeenCalled();
     });
 
     it('throws UnauthorizedException when signature is invalid', async () => {
-      const payload = { event: 'charge.success', data: { reference: 'ref_abc' } };
+      const payload = {
+        event: 'charge.success',
+        data: { reference: 'ref_abc' },
+      };
       const req = makeRawBodyReq(payload, 'bad_sig');
       mockPaymentService.verifyWebhookSignature.mockReturnValue(false);
 
@@ -66,7 +85,9 @@ describe('PaymentController', () => {
         controller.handleWebhook(req as any, 'bad_sig'),
       ).rejects.toThrow(UnauthorizedException);
 
-      expect(mockSubscriptionService.activateSubscription).not.toHaveBeenCalled();
+      expect(
+        mockSubscriptionService.activateSubscription,
+      ).not.toHaveBeenCalled();
     });
 
     it('throws UnauthorizedException when rawBody is missing', async () => {

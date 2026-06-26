@@ -8,9 +8,11 @@ import { WalletResolver } from './wallet.resolver';
 import { WalletController } from './wallet.controller';
 // import { PaymentModule } from '../payment/payment.module';
 import { Farmer } from '../farmer/entities/farmer.entity';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
   imports: [
+    ConfigModule,
     TypeOrmModule.forFeature([Wallet, LedgerEntry, PaymentIntentV2, Farmer]),
     // PaymentModule,
   ],
