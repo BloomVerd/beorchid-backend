@@ -19,8 +19,10 @@ export class InvestmentResolver {
   investmentPlans(
     @Args('status', { nullable: true, type: () => PlanStatus }) status?: PlanStatus,
     @Args('cropId', { nullable: true }) cropId?: string,
+    @Args('maxMaturityDays', { nullable: true, type: () => Number }) maxMaturityDays?: number,
+    @Args('lowRiskOnly', { nullable: true, type: () => Boolean }) lowRiskOnly?: boolean,
   ): Promise<InvestmentPlan[]> {
-    return this.investmentService.listPlans(status, cropId);
+    return this.investmentService.listPlans(status, cropId, maxMaturityDays, lowRiskOnly);
   }
 
   @Query(() => InvestmentPlan)

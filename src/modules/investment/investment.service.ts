@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { And, DataSource, ILike, LessThanOrEqual, Not, Repository } from 'typeorm';
 import * as crypto from 'crypto';
 import { InvestmentPlan, PlanStatus } from './entities/investment-plan.entity';
 import { InvestmentPurchase, PurchaseStatus } from './entities/investment-purchase.entity';
@@ -39,10 +39,12 @@ export class InvestmentService {
     return this.planRepo.save(plan);
   }
 
-  listPlans(status?: PlanStatus, cropId?: string): Promise<InvestmentPlan[]> {
+  listPlans(status?: PlanStatus, cropId?: string, maxMaturityDays?: number, lowRiskOnly?: boolean): Promise<InvestmentPlan[]> {
     const where: any = {};
     if (status) where.status = status;
     if (cropId) where.cropId = cropId;
+    if (maxMaturityDays != null) where.maturityDays = LessThanOrEqual(maxMaturityDays);
+    if (lowRiskOnly) where.riskNotes = And(Not(ILike('%high%')), Not(ILike('%moderate%')), Not(ILike('%medium%')));
     return this.planRepo.find({ where, order: { createdAt: 'DESC' } });
   }
 
