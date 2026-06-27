@@ -18,8 +18,11 @@ export class MarketResolver {
   constructor(private readonly marketService: MarketService) {}
 
   @Query(() => [Crop])
-  crops(): Promise<Crop[]> {
-    return this.marketService.findAllCrops();
+  crops(
+    @Args('category', { nullable: true }) category?: string,
+    @Args('region', { nullable: true }) region?: string,
+  ): Promise<Crop[]> {
+    return this.marketService.findAllCrops(category, region);
   }
 
   @Query(() => Crop)

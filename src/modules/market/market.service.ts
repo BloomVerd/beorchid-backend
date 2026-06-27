@@ -22,8 +22,11 @@ export class MarketService {
     private readonly insightRepo: Repository<MarketSurveyInsight>,
   ) {}
 
-  findAllCrops(): Promise<Crop[]> {
-    return this.cropRepo.find({ order: { name: 'ASC' } });
+  findAllCrops(category?: string, region?: string): Promise<Crop[]> {
+    const where: Record<string, unknown> = {};
+    if (category) where['category'] = category;
+    if (region) where['region'] = region;
+    return this.cropRepo.find({ where, order: { name: 'ASC' } });
   }
 
   async findCropById(id: string): Promise<Crop> {
