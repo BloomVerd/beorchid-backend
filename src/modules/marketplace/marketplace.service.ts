@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, LessThanOrEqual, Not, Repository } from 'typeorm';
+import { DataSource, ILike, LessThanOrEqual, Not, Repository } from 'typeorm';
 import * as crypto from 'crypto';
 import { Listing, ListingStatus } from './entities/listing.entity';
 import { Offer, OfferStatus } from './entities/offer.entity';
@@ -41,7 +41,7 @@ export class MarketplaceService {
 
   listListings(crop?: string, region?: string, status?: ListingStatus, maxPrice?: number): Promise<Listing[]> {
     const where: any = {};
-    if (crop) where.crop = crop;
+    if (crop) where.crop = ILike(crop);
     if (region) where.region = region;
     if (status) where.status = status;
     if (maxPrice) where.askingPrice = LessThanOrEqual(maxPrice);
