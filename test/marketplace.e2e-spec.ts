@@ -13,6 +13,9 @@ import { DataSource } from 'typeorm';
 import { Listing, ListingStatus } from '../src/modules/marketplace/entities/listing.entity';
 import { Offer, OfferStatus } from '../src/modules/marketplace/entities/offer.entity';
 import { Deal, DealStatus } from '../src/modules/marketplace/entities/deal.entity';
+import { Farm } from '../src/modules/farm/entities/farm.entity';
+import { ImageData } from '../src/modules/farm/entities/image-data.entity';
+import { FarmHealth } from '../src/modules/health/entities/farm-health.entity';
 import { MarketplaceService } from '../src/modules/marketplace/marketplace.service';
 import { MarketplaceResolver } from '../src/modules/marketplace/marketplace.resolver';
 import { WalletService } from '../src/modules/wallet/wallet.service';
@@ -87,6 +90,14 @@ describe('Marketplace (e2e)', () => {
       ),
     };
 
+    const farmRepo       = { findOne: jest.fn().mockResolvedValue(null), find: jest.fn().mockResolvedValue([]) };
+    const imageDataRepo  = { findOne: jest.fn().mockResolvedValue(null), find: jest.fn().mockResolvedValue([]) };
+    const farmHealthRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+      find: jest.fn().mockResolvedValue([]),
+      query: jest.fn().mockResolvedValue([]),
+    };
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
         GraphQLModule.forRoot<ApolloDriverConfig>({
@@ -100,10 +111,13 @@ describe('Marketplace (e2e)', () => {
       providers: [
         MarketplaceResolver,
         MarketplaceService,
-        { provide: getRepositoryToken(Listing), useValue: listingRepo },
-        { provide: getRepositoryToken(Offer),   useValue: offerRepo   },
-        { provide: getRepositoryToken(Deal),    useValue: dealRepo    },
-        { provide: DataSource,                  useValue: dataSource  },
+        { provide: getRepositoryToken(Listing),    useValue: listingRepo    },
+        { provide: getRepositoryToken(Offer),      useValue: offerRepo      },
+        { provide: getRepositoryToken(Deal),       useValue: dealRepo       },
+        { provide: getRepositoryToken(Farm),       useValue: farmRepo       },
+        { provide: getRepositoryToken(ImageData),  useValue: imageDataRepo  },
+        { provide: getRepositoryToken(FarmHealth), useValue: farmHealthRepo },
+        { provide: DataSource,                     useValue: dataSource     },
         { provide: WalletService,        useValue: walletService        },
         { provide: NotificationsService, useValue: notificationsService },
       ],

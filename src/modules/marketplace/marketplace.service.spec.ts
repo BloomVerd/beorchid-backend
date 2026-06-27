@@ -6,6 +6,7 @@ import { MarketplaceService } from './marketplace.service';
 import { Listing, ListingStatus } from './entities/listing.entity';
 import { Offer, OfferStatus } from './entities/offer.entity';
 import { Deal, DealStatus } from './entities/deal.entity';
+import { FarmHealth } from '../health/entities/farm-health.entity';
 import { WalletService } from '../wallet/wallet.service';
 import { LedgerAccount } from '../wallet/entities/ledger-entry.entity';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -62,14 +63,16 @@ describe('MarketplaceService', () => {
   let listingRepo: ReturnType<typeof makeRepo>;
   let offerRepo: ReturnType<typeof makeRepo>;
   let dealRepo: ReturnType<typeof makeRepo>;
+  let farmHealthRepo: ReturnType<typeof makeRepo>;
   let walletService: { getOrCreateWallet: jest.Mock; debit: jest.Mock; credit: jest.Mock };
   let notificationsService: { create: jest.Mock };
   let dataSource: any;
 
   beforeEach(async () => {
-    listingRepo  = makeRepo();
-    offerRepo    = makeRepo();
-    dealRepo     = makeRepo();
+    listingRepo    = makeRepo();
+    offerRepo      = makeRepo();
+    dealRepo       = makeRepo();
+    farmHealthRepo = makeRepo({ query: jest.fn().mockResolvedValue([]) });
     walletService      = { getOrCreateWallet: jest.fn(), debit: jest.fn(), credit: jest.fn() };
     notificationsService = { create: jest.fn().mockResolvedValue(undefined) };
 
@@ -90,10 +93,11 @@ describe('MarketplaceService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MarketplaceService,
-        { provide: getRepositoryToken(Listing), useValue: listingRepo },
-        { provide: getRepositoryToken(Offer),   useValue: offerRepo   },
-        { provide: getRepositoryToken(Deal),    useValue: dealRepo    },
-        { provide: DataSource,                  useValue: dataSource  },
+        { provide: getRepositoryToken(Listing),    useValue: listingRepo    },
+        { provide: getRepositoryToken(Offer),      useValue: offerRepo      },
+        { provide: getRepositoryToken(Deal),       useValue: dealRepo       },
+        { provide: getRepositoryToken(FarmHealth), useValue: farmHealthRepo },
+        { provide: DataSource,                     useValue: dataSource     },
         { provide: WalletService,        useValue: walletService        },
         { provide: NotificationsService, useValue: notificationsService },
       ],
@@ -103,6 +107,41 @@ describe('MarketplaceService', () => {
   });
 
   afterEach(() => jest.clearAllMocks());
+
+  // ── listListings ──────────────────────────────────────────────────────────
+
+  describe('listListings', () => {
+    it('returns listings without filters', async () => {
+      const listing = makeListing();
+      listingRepo.find.mockResolvedValue([listing]);
+
+      const result = await service.listListings();
+      expect(listingRepo.find).toHaveBeenCalled();
+      expect(result).toEqual([listing]);
+    });
+
+    it('filters by minHealthScore using only the latest health record per farm', async () => {
+      const listing = makeListing();
+      farmHealthRepo.query.mockResolvedValue([{ farmId: 'farm-1' }]);
+      listingRepo.find.mockResolvedValue([listing]);
+
+      const result = await service.listListings(undefined, undefined, undefined, undefined, 80);
+
+      expect(farmHealthRepo.query).toHaveBeenCalledWith(
+        expect.stringContaining('DISTINCT ON'),
+        [80],
+      );
+      expect(result).toEqual([listing]);
+    });
+
+    it('returns empty array when no farm meets the health threshold', async () => {
+      farmHealthRepo.query.mockResolvedValue([]);
+
+      const result = await service.listListings(undefined, undefined, undefined, undefined, 95);
+      expect(result).toEqual([]);
+      expect(listingRepo.find).not.toHaveBeenCalled();
+    });
+  });
 
   // ── createListing ──────────────────────────────────────────────────────────
 
