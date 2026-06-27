@@ -18,8 +18,11 @@ export class AuthResolver {
   }
 
   @Mutation(() => MessageResponse)
-  sendMagicLink(@Args('email') email: string) {
-    return this.authService.sendMagicLink(email);
+  sendMagicLink(
+    @Args('email') email: string,
+    @Args('redirectBase', { nullable: true }) redirectBase?: string,
+  ) {
+    return this.authService.sendMagicLink(email, redirectBase);
   }
 
   @Mutation(() => AuthPayload)

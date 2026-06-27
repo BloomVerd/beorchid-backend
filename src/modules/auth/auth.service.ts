@@ -68,7 +68,10 @@ export class AuthService {
     return this.issueTokens(farmer);
   }
 
-  async sendMagicLink(email: string): Promise<MessageResponse> {
+  async sendMagicLink(
+    email: string,
+    redirectBase?: string,
+  ): Promise<MessageResponse> {
     let farmer = await this.farmerRepository.findOne({ where: { email } });
     if (!farmer) {
       throw new BadRequestException('No account found with this email');
@@ -85,8 +88,9 @@ export class AuthService {
     });
     await this.magicLinkTokenRepository.save(magicLink);
 
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
-    const link = `${frontendUrl}/auth/verify?token=${rawToken}`;
+    const defaultBase = `${this.configService.get<string>('FRONTEND_URL')}/auth/verify`;
+    const base = redirectBase ?? defaultBase;
+    const link = `${base}?token=${rawToken}`;
 
     await this.emailProducer.sendMagicLink({
       email,
