@@ -4,12 +4,13 @@ import { Crop } from './entities/crop.entity';
 import { MarketPricePoint } from './entities/market-price-point.entity';
 import { PriceForecast } from './entities/price-forecast.entity';
 import { MarketSurveyInsight } from './entities/market-survey-insight.entity';
+import { Coin } from '../coin/entities/coin.entity';
 import { MarketService } from './market.service';
 import { MarketResolver } from './market.resolver';
 import { MarketSeeder } from './market.seeder';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Crop, MarketPricePoint, PriceForecast, MarketSurveyInsight])],
+  imports: [TypeOrmModule.forFeature([Crop, MarketPricePoint, PriceForecast, MarketSurveyInsight, Coin])],
   providers: [MarketService, MarketResolver, MarketSeeder],
   exports: [MarketService, MarketSeeder],
 })

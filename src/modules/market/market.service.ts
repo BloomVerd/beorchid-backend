@@ -5,6 +5,7 @@ import { Crop } from './entities/crop.entity';
 import { MarketPricePoint } from './entities/market-price-point.entity';
 import { PriceForecast } from './entities/price-forecast.entity';
 import { MarketSurveyInsight, InsightType } from './entities/market-survey-insight.entity';
+import { Coin } from '../coin/entities/coin.entity';
 import { PublishInsightInput } from './inputs/publish-insight.input';
 import { PublishForecastInput } from './inputs/publish-forecast.input';
 import { CreateCropInput } from './inputs/create-crop.input';
@@ -21,6 +22,8 @@ export class MarketService {
     private readonly forecastRepo: Repository<PriceForecast>,
     @InjectRepository(MarketSurveyInsight)
     private readonly insightRepo: Repository<MarketSurveyInsight>,
+    @InjectRepository(Coin)
+    private readonly coinRepo: Repository<Coin>,
   ) {}
 
   findAllCrops(category?: string, region?: string): Promise<Crop[]> {
@@ -146,5 +149,9 @@ export class MarketService {
       crop = await this.cropRepo.save(crop);
     }
     return crop;
+  }
+
+  findCoinByCropId(cropId: string): Promise<Coin | null> {
+    return this.coinRepo.findOne({ where: { cropId } });
   }
 }

@@ -31,6 +31,7 @@ import { InvestmentModule } from './modules/investment/investment.module';
 import { CoinModule } from './modules/coin/coin.module';
 import { WatchlistModule } from './modules/watchlist/watchlist.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { SearchModule } from './modules/search/search.module';
 
 @Module({
   imports: [
@@ -84,6 +85,7 @@ import { AdminModule } from './modules/admin/admin.module';
     CoinModule,
     WatchlistModule,
     AdminModule,
+    SearchModule,
   ],
 })
 export class AppModule {}

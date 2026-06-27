@@ -5,6 +5,7 @@ import { Crop } from './entities/crop.entity';
 import { MarketPricePoint } from './entities/market-price-point.entity';
 import { PriceForecast } from './entities/price-forecast.entity';
 import { MarketSurveyInsight, InsightType } from './entities/market-survey-insight.entity';
+import { Coin } from '../coin/entities/coin.entity';
 import { PriceDataPoint } from './types/crop-price-series.type';
 import { PublishInsightInput } from './inputs/publish-insight.input';
 import { PublishForecastInput } from './inputs/publish-forecast.input';
@@ -69,6 +70,11 @@ export class MarketResolver {
   @ResolveField('recentPrices', () => [PriceDataPoint])
   recentPrices(@Parent() crop: Crop): Promise<PriceDataPoint[]> {
     return this.marketService.getRecentPricesForCrop(crop.id);
+  }
+
+  @ResolveField('coin', () => Coin, { nullable: true })
+  coin(@Parent() crop: Crop): Promise<Coin | null> {
+    return this.marketService.findCoinByCropId(crop.id);
   }
 
   @Query(() => [Crop])

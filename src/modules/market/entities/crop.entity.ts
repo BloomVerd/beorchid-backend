@@ -7,6 +7,7 @@ import {
 } from 'typeorm';
 import { Field, ID, ObjectType } from '@nestjs/graphql';
 import { PriceDataPoint } from '../types/crop-price-series.type';
+import { Coin } from '../../coin/entities/coin.entity';
 
 @ObjectType()
 @Entity('crops')
@@ -41,6 +42,9 @@ export class Crop {
 
   @Field(() => [PriceDataPoint], { nullable: true })
   recentPrices?: PriceDataPoint[];
+
+  @Field(() => Coin, { nullable: true })
+  coin?: Coin | null;
 
   @Field()
   @CreateDateColumn()
