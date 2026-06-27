@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ForbiddenException,
   BadRequestException,
@@ -19,6 +20,8 @@ import { NotificationType } from '../notifications/entities/notification.entity'
 
 @Injectable()
 export class MarketplaceService {
+  private readonly logger = new Logger(MarketplaceService.name);
+
   constructor(
     @InjectRepository(Listing) private readonly listingRepo: Repository<Listing>,
     @InjectRepository(Offer) private readonly offerRepo: Repository<Offer>,
@@ -108,11 +111,13 @@ export class MarketplaceService {
       await this.listingRepo.save(listing);
     }
 
-    await this.notificationsService.create(listing.sellerId, {
-      title: 'New offer received',
-      message: `You received an offer of ${amount / 100} GHS on your listing`,
-      type: NotificationType.OFFER_RECEIVED,
-    });
+    this.notificationsService
+      .create(listing.sellerId, {
+        title: 'New offer received',
+        message: `You received an offer of ${amount / 100} GHS on your listing`,
+        type: NotificationType.OFFER_RECEIVED,
+      })
+      .catch((err) => this.logger.error(`Failed to notify seller ${listing.sellerId} of new offer: ${err.message}`));
 
     return offer;
   }
