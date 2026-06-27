@@ -50,6 +50,15 @@ export class InvestmentResolver {
   @Mutation(() => InvestmentPlan)
   @UseGuards(RolesGuard)
   @Roles('super_admin')
+  openInvestmentPlan(
+    @Args('id', { type: () => ID }) id: string,
+  ): Promise<InvestmentPlan> {
+    return this.investmentService.openPlan(id);
+  }
+
+  @Mutation(() => InvestmentPlan)
+  @UseGuards(RolesGuard)
+  @Roles('super_admin')
   closeInvestmentPlan(
     @Args('id', { type: () => ID }) id: string,
   ): Promise<InvestmentPlan> {

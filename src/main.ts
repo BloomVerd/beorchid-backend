@@ -6,7 +6,6 @@ import { graphqlUploadExpress } from 'graphql-upload';
 import { ValidationPipe } from '@nestjs/common';
 import { FarmService } from './modules/farm/farm.service';
 import { SubscriptionPlanService } from './modules/payment/subscription-plan.service';
-import { MarketSeeder } from './modules/market/market.seeder';
 import { AdminSeedService } from './modules/admin/admin-seed.service';
 
 async function bootstrap() {
@@ -43,9 +42,6 @@ async function bootstrap() {
 
   const subscriptionPlanService = app.get(SubscriptionPlanService);
   await subscriptionPlanService.setupPlans();
-
-  const marketSeeder = app.get(MarketSeeder);
-  await marketSeeder.seed();
 
   const adminSeedService = app.get(AdminSeedService);
   await adminSeedService.seedSuperAdmin();

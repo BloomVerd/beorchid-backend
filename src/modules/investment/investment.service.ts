@@ -59,6 +59,13 @@ export class InvestmentService {
     return this.findPlanById(id);
   }
 
+  async openPlan(id: string): Promise<InvestmentPlan> {
+    const plan = await this.findPlanById(id);
+    if (plan.status !== PlanStatus.DRAFT)
+      throw new BadRequestException('Only draft plans can be opened');
+    return this.updatePlan(id, { status: PlanStatus.OPEN });
+  }
+
   async closePlan(id: string): Promise<InvestmentPlan> {
     return this.updatePlan(id, { status: PlanStatus.CLOSED });
   }

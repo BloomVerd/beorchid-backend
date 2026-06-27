@@ -68,6 +68,10 @@ export class CoinService {
     return this.findCoinById(id);
   }
 
+  async updateCoinStatus(id: string, status: CoinStatus): Promise<Coin> {
+    return this.updateCoin(id, { status });
+  }
+
   recomputePrice(coinId: string): Promise<CoinPricePoint> {
     return this.pricingService.recompute(coinId);
   }

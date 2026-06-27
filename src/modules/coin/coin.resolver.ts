@@ -1,7 +1,7 @@
 import { Resolver, Query, Mutation, Args, ID } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { CoinService } from './coin.service';
-import { Coin } from './entities/coin.entity';
+import { Coin, CoinStatus } from './entities/coin.entity';
 import { CoinPricePoint } from './entities/coin-price-point.entity';
 import { CoinTransaction } from './entities/coin-transaction.entity';
 import { CreateCoinInput } from './inputs/create-coin.input';
@@ -48,6 +48,16 @@ export class CoinResolver {
     @CurrentFarmer() user: Farmer,
   ): Promise<Coin> {
     return this.coinService.createCoin(input, user.id);
+  }
+
+  @Mutation(() => Coin)
+  @UseGuards(RolesGuard)
+  @Roles('super_admin')
+  updateCoinStatus(
+    @Args('id', { type: () => ID }) id: string,
+    @Args('status', { type: () => CoinStatus }) status: CoinStatus,
+  ): Promise<Coin> {
+    return this.coinService.updateCoinStatus(id, status);
   }
 
   @Mutation(() => CoinPricePoint)

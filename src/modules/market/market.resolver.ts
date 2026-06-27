@@ -8,6 +8,7 @@ import { MarketSurveyInsight, InsightType } from './entities/market-survey-insig
 import { PriceDataPoint } from './types/crop-price-series.type';
 import { PublishInsightInput } from './inputs/publish-insight.input';
 import { PublishForecastInput } from './inputs/publish-forecast.input';
+import { CreateCropInput } from './inputs/create-crop.input';
 import { GqlJwtAuthGuard } from 'src/common/guards';
 import { RolesGuard, Roles } from '../roles';
 import { CurrentFarmer } from 'src/common/decorators';
@@ -92,5 +93,12 @@ export class MarketResolver {
     @Args('input') input: PublishForecastInput,
   ): Promise<PriceForecast> {
     return this.marketService.publishForecast(input);
+  }
+
+  @Mutation(() => Crop)
+  @UseGuards(GqlJwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  createCrop(@Args('input') input: CreateCropInput): Promise<Crop> {
+    return this.marketService.createCrop(input);
   }
 }

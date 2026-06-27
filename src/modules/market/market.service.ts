@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { Crop } from './entities/crop.entity';
@@ -7,6 +7,7 @@ import { PriceForecast } from './entities/price-forecast.entity';
 import { MarketSurveyInsight, InsightType } from './entities/market-survey-insight.entity';
 import { PublishInsightInput } from './inputs/publish-insight.input';
 import { PublishForecastInput } from './inputs/publish-forecast.input';
+import { CreateCropInput } from './inputs/create-crop.input';
 import { PriceDataPoint } from './types/crop-price-series.type';
 
 @Injectable()
@@ -119,6 +120,23 @@ export class MarketService {
       priceType: p.priceType,
       source: p.source,
     }));
+  }
+
+  async createCrop(input: CreateCropInput): Promise<Crop> {
+    const slug = input.slug ?? input.name.toLowerCase().replace(/\s+/g, '-');
+    const existing = await this.cropRepo.findOne({
+      where: [{ name: input.name }, { slug }],
+    });
+    if (existing) throw new ConflictException(`Crop "${input.name}" already exists`);
+
+    const crop = this.cropRepo.create({
+      name: input.name,
+      slug,
+      unit: input.unit ?? 'per 100kg bag',
+      category: input.category ?? null,
+      region: input.region ?? null,
+    });
+    return this.cropRepo.save(crop);
   }
 
   async upsertCrop(name: string, slug: string, unit?: string): Promise<Crop> {
