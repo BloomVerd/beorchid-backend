@@ -4,7 +4,13 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import {
+  Between,
+  DataSource,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  Repository,
+} from 'typeorm';
 import * as crypto from 'crypto';
 import { Coin, CoinStatus } from './entities/coin.entity';
 import { CoinPricePoint } from './entities/coin-price-point.entity';
@@ -20,9 +26,12 @@ import { CoinHoldingWithPnl } from './types/coin-holding-with-pnl.type';
 export class CoinService {
   constructor(
     @InjectRepository(Coin) private readonly coinRepo: Repository<Coin>,
-    @InjectRepository(CoinPricePoint) private readonly pointRepo: Repository<CoinPricePoint>,
-    @InjectRepository(CoinHolding) private readonly holdingRepo: Repository<CoinHolding>,
-    @InjectRepository(CoinTransaction) private readonly txnRepo: Repository<CoinTransaction>,
+    @InjectRepository(CoinPricePoint)
+    private readonly pointRepo: Repository<CoinPricePoint>,
+    @InjectRepository(CoinHolding)
+    private readonly holdingRepo: Repository<CoinHolding>,
+    @InjectRepository(CoinTransaction)
+    private readonly txnRepo: Repository<CoinTransaction>,
     private readonly dataSource: DataSource,
     private readonly pricingService: CoinPricingService,
     private readonly walletService: WalletService,
@@ -32,7 +41,12 @@ export class CoinService {
     const coin = this.coinRepo.create({
       ...input,
       currentPrice: input.basePrice,
-      pricingWeights: input.pricingWeights ?? { w_trend: 0.3, w_demand: 0.2, w_health: 0.3, w_vol: 0.2 },
+      pricingWeights: input.pricingWeights ?? {
+        w_trend: 0.3,
+        w_demand: 0.2,
+        w_health: 0.3,
+        w_vol: 0.2,
+      },
       createdBy,
       status: CoinStatus.DRAFT,
     });
@@ -58,72 +72,145 @@ export class CoinService {
     return this.pricingService.recompute(coinId);
   }
 
-  getCoinPrices(coinId: string, from?: Date, to?: Date): Promise<CoinPricePoint[]> {
-    return this.pointRepo.find({ where: { coinId }, order: { computedAt: 'ASC' } });
+  getCoinPrices(
+    coinId: string,
+    from?: Date,
+    to?: Date,
+  ): Promise<CoinPricePoint[]> {
+    const where: any = { coinId };
+    if (from && to) where.computedAt = Between(from, to);
+    else if (from) where.computedAt = MoreThanOrEqual(from);
+    else if (to) where.computedAt = LessThanOrEqual(to);
+    return this.pointRepo.find({ where, order: { computedAt: 'ASC' } });
   }
 
-  async buy(coinId: string, userId: string, units: number, idempotencyKey: string): Promise<CoinTransaction> {
+  async buy(
+    coinId: string,
+    userId: string,
+    units: number,
+    idempotencyKey: string,
+  ): Promise<CoinTransaction> {
     return this.dataSource.transaction(async (em) => {
       const coinRepo = em.getRepository(Coin);
       const holdingRepo = em.getRepository(CoinHolding);
       const txnRepo = em.getRepository(CoinTransaction);
 
-      const coin = await coinRepo.findOne({ where: { id: coinId }, lock: { mode: 'pessimistic_write' } });
+      const coin = await coinRepo.findOne({
+        where: { id: coinId },
+        lock: { mode: 'pessimistic_write' },
+      });
       if (!coin) throw new NotFoundException('Coin not found');
-      if (coin.status !== CoinStatus.ACTIVE) throw new BadRequestException('Coin is not active');
+      if (coin.status !== CoinStatus.ACTIVE)
+        throw new BadRequestException('Coin is not active');
 
       const unitPrice = coin.currentPrice;
       const grossAmount = Math.round(units * unitPrice);
 
       const wallet = await this.walletService.getOrCreateWallet(userId);
       const txnId = crypto.randomUUID();
-      await this.walletService.debit(wallet.id, grossAmount, LedgerAccount.COIN_POOL, txnId, em);
+      await this.walletService.debit(
+        wallet.id,
+        grossAmount,
+        LedgerAccount.COIN_POOL,
+        txnId,
+        em,
+      );
 
       let holding = await holdingRepo.findOne({ where: { userId, coinId } });
       if (holding) {
-        const totalCost = Number(holding.avgCost) * Number(holding.units) + grossAmount;
+        const totalCost =
+          Number(holding.avgCost) * Number(holding.units) + grossAmount;
         const totalUnits = Number(holding.units) + units;
         holding.units = totalUnits;
         holding.avgCost = Math.round(totalCost / totalUnits);
       } else {
-        holding = holdingRepo.create({ userId, coinId, units, avgCost: unitPrice });
+        holding = holdingRepo.create({
+          userId,
+          coinId,
+          units,
+          avgCost: unitPrice,
+        });
       }
       await holdingRepo.save(holding);
 
       coin.circulatingSupply = Number(coin.circulatingSupply) + units;
       await coinRepo.save(coin);
 
-      return txnRepo.save(txnRepo.create({ userId, coinId, side: CoinSide.BUY, units, unitPrice, grossAmount, fee: 0, ledgerRef: txnId }));
+      return txnRepo.save(
+        txnRepo.create({
+          userId,
+          coinId,
+          side: CoinSide.BUY,
+          units,
+          unitPrice,
+          grossAmount,
+          fee: 0,
+          ledgerRef: txnId,
+        }),
+      );
     });
   }
 
-  async sell(coinId: string, userId: string, units: number, idempotencyKey: string): Promise<CoinTransaction> {
+  async sell(
+    coinId: string,
+    userId: string,
+    units: number,
+    idempotencyKey: string,
+  ): Promise<CoinTransaction> {
     return this.dataSource.transaction(async (em) => {
       const coinRepo = em.getRepository(Coin);
       const holdingRepo = em.getRepository(CoinHolding);
       const txnRepo = em.getRepository(CoinTransaction);
 
-      const coin = await coinRepo.findOne({ where: { id: coinId }, lock: { mode: 'pessimistic_write' } });
+      const coin = await coinRepo.findOne({
+        where: { id: coinId },
+        lock: { mode: 'pessimistic_write' },
+      });
       if (!coin) throw new NotFoundException('Coin not found');
-      if (coin.status === CoinStatus.DELISTED) throw new BadRequestException('Coin is delisted');
+      if (coin.status === CoinStatus.DELISTED)
+        throw new BadRequestException('Coin is delisted');
 
-      const holding = await holdingRepo.findOne({ where: { userId, coinId }, lock: { mode: 'pessimistic_write' } });
-      if (!holding || Number(holding.units) < units) throw new BadRequestException('Insufficient coin holdings');
+      const holding = await holdingRepo.findOne({
+        where: { userId, coinId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!holding || Number(holding.units) < units)
+        throw new BadRequestException('Insufficient coin holdings');
 
       const unitPrice = coin.currentPrice;
       const grossAmount = Math.round(units * unitPrice);
 
       const wallet = await this.walletService.getOrCreateWallet(userId);
       const txnId = crypto.randomUUID();
-      await this.walletService.credit(wallet.id, grossAmount, LedgerAccount.USER_CASH, txnId, em);
+      await this.walletService.credit(
+        wallet.id,
+        grossAmount,
+        LedgerAccount.USER_CASH,
+        txnId,
+        em,
+      );
 
       holding.units = Number(holding.units) - units;
       await holdingRepo.save(holding);
 
-      coin.circulatingSupply = Math.max(0, Number(coin.circulatingSupply) - units);
+      coin.circulatingSupply = Math.max(
+        0,
+        Number(coin.circulatingSupply) - units,
+      );
       await coinRepo.save(coin);
 
-      return txnRepo.save(txnRepo.create({ userId, coinId, side: CoinSide.SELL, units, unitPrice, grossAmount, fee: 0, ledgerRef: txnId }));
+      return txnRepo.save(
+        txnRepo.create({
+          userId,
+          coinId,
+          side: CoinSide.SELL,
+          units,
+          unitPrice,
+          grossAmount,
+          fee: 0,
+          ledgerRef: txnId,
+        }),
+      );
     });
   }
 
@@ -132,9 +219,16 @@ export class CoinService {
     const results: CoinHoldingWithPnl[] = [];
     for (const holding of holdings) {
       const coin = await this.findCoinById(holding.coinId);
-      const currentValue = Math.round(Number(holding.units) * coin.currentPrice);
+      const currentValue = Math.round(
+        Number(holding.units) * coin.currentPrice,
+      );
       const cost = Math.round(Number(holding.units) * Number(holding.avgCost));
-      results.push({ holding, coin, currentValue, unrealizedPnl: currentValue - cost });
+      results.push({
+        holding,
+        coin,
+        currentValue,
+        unrealizedPnl: currentValue - cost,
+      });
     }
     return results;
   }
