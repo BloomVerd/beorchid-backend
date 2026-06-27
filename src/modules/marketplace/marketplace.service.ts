@@ -5,9 +5,10 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, ILike, LessThanOrEqual, Not, Repository } from 'typeorm';
+import { DataSource, ILike, In, LessThanOrEqual, Not, Repository } from 'typeorm';
 import * as crypto from 'crypto';
 import { Listing, ListingStatus } from './entities/listing.entity';
+import { FarmHealth } from '../health/entities/farm-health.entity';
 import { Offer, OfferStatus } from './entities/offer.entity';
 import { Deal, DealStatus } from './entities/deal.entity';
 import { CreateListingInput } from './inputs/create-listing.input';
@@ -22,6 +23,7 @@ export class MarketplaceService {
     @InjectRepository(Listing) private readonly listingRepo: Repository<Listing>,
     @InjectRepository(Offer) private readonly offerRepo: Repository<Offer>,
     @InjectRepository(Deal) private readonly dealRepo: Repository<Deal>,
+    @InjectRepository(FarmHealth) private readonly farmHealthRepo: Repository<FarmHealth>,
     private readonly dataSource: DataSource,
     private readonly walletService: WalletService,
     private readonly notificationsService: NotificationsService,
@@ -39,12 +41,33 @@ export class MarketplaceService {
     return this.listingRepo.save(listing);
   }
 
-  listListings(crop?: string, region?: string, status?: ListingStatus, maxPrice?: number): Promise<Listing[]> {
+  async listListings(
+    crop?: string,
+    region?: string,
+    status?: ListingStatus,
+    maxPrice?: number,
+    minHealthScore?: number,
+  ): Promise<Listing[]> {
     const where: any = {};
     if (crop) where.crop = ILike(crop);
     if (region) where.region = region;
     if (status) where.status = status;
     if (maxPrice) where.askingPrice = LessThanOrEqual(maxPrice);
+    if (minHealthScore != null) {
+      const raw: { farmId: string }[] = await this.farmHealthRepo.query(
+        `SELECT "farmId"
+         FROM (
+           SELECT DISTINCT ON ("farmId") "farmId", overall_score
+           FROM farm_health
+           ORDER BY "farmId", computed_at DESC NULLS LAST, "createdAt" DESC
+         ) latest
+         WHERE overall_score >= $1`,
+        [minHealthScore],
+      );
+      const farmIds = raw.map((r) => r.farmId).filter(Boolean);
+      if (farmIds.length === 0) return [];
+      where.farmId = In(farmIds);
+    }
     return this.listingRepo.find({ where, order: { createdAt: 'DESC' } });
   }
 

@@ -34,8 +34,9 @@ export class MarketplaceResolver {
     @Args('region', { nullable: true }) region?: string,
     @Args('status', { nullable: true, type: () => ListingStatus }) status?: ListingStatus,
     @Args('maxPrice', { nullable: true, type: () => Float }) maxPrice?: number,
+    @Args('minHealthScore', { nullable: true, type: () => Float }) minHealthScore?: number,
   ): Promise<Listing[]> {
-    return this.marketplaceService.listListings(crop, region, status, maxPrice);
+    return this.marketplaceService.listListings(crop, region, status, maxPrice, minHealthScore);
   }
 
   @Query(() => Listing)
