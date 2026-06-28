@@ -72,7 +72,7 @@ import { Coordinate } from './entities/coordinate.entity';
 import { PredictionRange } from '../predictions/entities/prediction-range.entity';
 import { SubscriptionService } from '../payment/subscription.service';
 import { PlanName } from '../payment/entities/subscription-plan.entity';
-import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsProducer } from '../notifications/notifications.producer';
 import { EmailProducer } from '../email/email.producer';
 import { SmsService } from '../sms/sms.service';
 import { FarmerSettingsService } from '../farmer/farmer-settings.service';
@@ -157,7 +157,7 @@ describe('FarmService', () => {
   };
   let configService: { get: jest.Mock };
   let subscriptionService: { getActiveSubscription: jest.Mock };
-  let notificationsService: { create: jest.Mock; pushToStream: jest.Mock };
+  let notificationsProducer: { notify: jest.Mock };
   let emailProducer: { sendFarmSetupComplete: jest.Mock };
   let smsService: { sendFarmSetupComplete: jest.Mock };
   let farmerSettingsService: { getOrCreate: jest.Mock };
@@ -227,10 +227,7 @@ describe('FarmService', () => {
         plan: { name: PlanName.POPULAR, displayName: 'Popular', maxFarms: 10 },
       }),
     };
-    notificationsService = {
-      create: jest.fn().mockResolvedValue({ id: 'notif-1' }),
-      pushToStream: jest.fn(),
-    };
+    notificationsProducer = { notify: jest.fn().mockResolvedValue(undefined) };
     emailProducer = { sendFarmSetupComplete: jest.fn().mockResolvedValue(undefined) };
     smsService = { sendFarmSetupComplete: jest.fn().mockResolvedValue(undefined) };
     farmerSettingsService = {
@@ -247,7 +244,7 @@ describe('FarmService', () => {
         { provide: getRepositoryToken(IotToolCall), useValue: iotToolCallRepo },
         { provide: ConfigService, useValue: configService },
         { provide: SubscriptionService, useValue: subscriptionService },
-        { provide: NotificationsService, useValue: notificationsService },
+        { provide: NotificationsProducer, useValue: notificationsProducer },
         { provide: EmailProducer, useValue: emailProducer },
         { provide: SmsService, useValue: smsService },
         { provide: FarmerSettingsService, useValue: farmerSettingsService },

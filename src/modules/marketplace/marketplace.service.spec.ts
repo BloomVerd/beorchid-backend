@@ -9,7 +9,7 @@ import { Deal, DealStatus } from './entities/deal.entity';
 import { FarmHealth } from '../health/entities/farm-health.entity';
 import { WalletService } from '../wallet/wallet.service';
 import { LedgerAccount } from '../wallet/entities/ledger-entry.entity';
-import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsProducer } from '../notifications/notifications.producer';
 
 const makeRepo = (overrides: Partial<any> = {}) => ({
   findOne: jest.fn(),
@@ -65,7 +65,7 @@ describe('MarketplaceService', () => {
   let dealRepo: ReturnType<typeof makeRepo>;
   let farmHealthRepo: ReturnType<typeof makeRepo>;
   let walletService: { getOrCreateWallet: jest.Mock; debit: jest.Mock; credit: jest.Mock };
-  let notificationsService: { create: jest.Mock };
+  let notificationsProducer: { notify: jest.Mock };
   let dataSource: any;
 
   beforeEach(async () => {
@@ -74,7 +74,7 @@ describe('MarketplaceService', () => {
     dealRepo       = makeRepo();
     farmHealthRepo = makeRepo({ query: jest.fn().mockResolvedValue([]) });
     walletService      = { getOrCreateWallet: jest.fn(), debit: jest.fn(), credit: jest.fn() };
-    notificationsService = { create: jest.fn().mockResolvedValue(undefined) };
+    notificationsProducer = { notify: jest.fn().mockResolvedValue(undefined) };
 
     dataSource = {
       transaction: jest.fn().mockImplementation(async (fn: (em: any) => Promise<any>) => {
@@ -99,7 +99,7 @@ describe('MarketplaceService', () => {
         { provide: getRepositoryToken(FarmHealth), useValue: farmHealthRepo },
         { provide: DataSource,                     useValue: dataSource     },
         { provide: WalletService,        useValue: walletService        },
-        { provide: NotificationsService, useValue: notificationsService },
+        { provide: NotificationsProducer, useValue: notificationsProducer },
       ],
     }).compile();
 
@@ -176,7 +176,7 @@ describe('MarketplaceService', () => {
       expect(listingRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({ status: ListingStatus.UNDER_OFFER }),
       );
-      expect(notificationsService.create).toHaveBeenCalledWith('seller-1', expect.any(Object));
+      expect(notificationsProducer.notify).toHaveBeenCalledWith('seller-1', expect.any(Object));
     });
 
     it('throws BadRequestException on a WITHDRAWN listing', async () => {
@@ -248,7 +248,7 @@ describe('MarketplaceService', () => {
     it('notifies both buyer and seller', async () => {
       setupAccept();
       await service.acceptOffer('offer-1', 'seller-1');
-      expect(notificationsService.create).toHaveBeenCalledTimes(2);
+      expect(notificationsProducer.notify).toHaveBeenCalledTimes(2);
     });
 
     it('throws BadRequestException when offer is not PENDING', async () => {
@@ -277,7 +277,7 @@ describe('MarketplaceService', () => {
 
       const result = await service.rejectOffer('offer-1', 'seller-1');
       expect(result.status).toBe(OfferStatus.REJECTED);
-      expect(notificationsService.create).toHaveBeenCalledWith('buyer-1', expect.any(Object));
+      expect(notificationsProducer.notify).toHaveBeenCalledWith('buyer-1', expect.any(Object));
     });
   });
 
@@ -319,7 +319,7 @@ describe('MarketplaceService', () => {
 
       expect(result.status).toBe(DealStatus.COMPLETED);
       expect(walletService.credit).toHaveBeenCalledWith(
-        'wallet-seller', 180000, LedgerAccount.USER_CASH, expect.any(String),
+        'wallet-seller', 180000, LedgerAccount.USER_CASH, expect.any(String), expect.anything(),
       );
     });
   });

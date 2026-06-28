@@ -14,7 +14,7 @@ import { SensorHistoryPoint } from './entities/sensor-history-point.entity';
 import { YieldComparison } from './entities/yield-comparison.entity';
 import { Prediction } from '../predictions/entities/prediction.entity';
 import { FarmerSettingsService } from '../farmer/farmer-settings.service';
-import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsProducer } from '../notifications/notifications.producer';
 import { EmailProducer } from '../email/email.producer';
 import { SmsService } from '../sms/sms.service';
 
@@ -102,7 +102,7 @@ describe('HealthConsumer', () => {
   let yieldRepo: { find: jest.Mock; create: jest.Mock; save: jest.Mock };
   let predictionRepo: { find: jest.Mock };
   let farmerSettingsService: { getOrCreate: jest.Mock };
-  let notificationsService: { create: jest.Mock; pushToStream: jest.Mock };
+  let notificationsProducer: { notify: jest.Mock };
   let emailProducer: { sendHealthAlert: jest.Mock };
   let smsService: { sendHealthAlert: jest.Mock };
   let llmCreate: jest.Mock;
@@ -143,10 +143,7 @@ describe('HealthConsumer', () => {
     farmerSettingsService = {
       getOrCreate: jest.fn().mockResolvedValue({ farmDataLookbackSeconds: 3600 }),
     };
-    notificationsService = {
-      create: jest.fn().mockResolvedValue({ id: 'notif-1' }),
-      pushToStream: jest.fn(),
-    };
+    notificationsProducer = { notify: jest.fn().mockResolvedValue(undefined) };
     emailProducer = { sendHealthAlert: jest.fn().mockResolvedValue(undefined) };
     smsService = { sendHealthAlert: jest.fn().mockResolvedValue(undefined) };
 
@@ -164,7 +161,7 @@ describe('HealthConsumer', () => {
         { provide: getRepositoryToken(YieldComparison), useValue: yieldRepo },
         { provide: getRepositoryToken(Prediction), useValue: predictionRepo },
         { provide: FarmerSettingsService, useValue: farmerSettingsService },
-        { provide: NotificationsService, useValue: notificationsService },
+        { provide: NotificationsProducer, useValue: notificationsProducer },
         { provide: EmailProducer, useValue: emailProducer },
         { provide: SmsService, useValue: smsService },
       ],
@@ -303,12 +300,13 @@ describe('HealthConsumer', () => {
 
       await consumer.process(makeJob({ farmIds: ['farm-1'] }) as any);
 
-      expect(notificationsService.create).toHaveBeenCalledWith(
+      expect(notificationsProducer.notify).toHaveBeenCalledWith(
         'farmer-1',
         expect.objectContaining({
           title: 'Device action recommended',
           message: expect.stringContaining('IRRIGATE'),
         }),
+        expect.any(Boolean),
       );
       expect(llmCreate).toHaveBeenCalledTimes(2);
       const secondCall = llmCreate.mock.calls[1][0];

@@ -52,7 +52,17 @@ describe('WalletService', () => {
     ledgerRepo = makeRepo();
     intentRepo = makeRepo();
     farmerRepo = makeRepo();
-    dataSource = { transaction: jest.fn() };
+    dataSource = {
+      transaction: jest.fn((fn) =>
+        fn({
+          getRepository: (entity: any) => {
+            if (entity === Wallet) return walletRepo;
+            if (entity === LedgerEntry) return ledgerRepo;
+            return makeRepo();
+          },
+        }),
+      ),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [

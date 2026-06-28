@@ -15,7 +15,7 @@ import { InvestmentSettlement } from '../src/modules/investment/entities/investm
 import { InvestmentService } from '../src/modules/investment/investment.service';
 import { InvestmentResolver } from '../src/modules/investment/investment.resolver';
 import { WalletService } from '../src/modules/wallet/wallet.service';
-import { NotificationsService } from '../src/modules/notifications/notifications.service';
+import { NotificationsProducer } from '../src/modules/notifications/notifications.producer';
 import { GqlJwtAuthGuard } from '../src/common/guards';
 import { RolesGuard } from '../src/modules/roles';
 
@@ -66,7 +66,7 @@ describe('Investment (e2e)', () => {
       debit: jest.fn().mockResolvedValue(undefined),
       credit: jest.fn().mockResolvedValue(undefined),
     };
-    const notificationsService = { create: jest.fn().mockResolvedValue(undefined) };
+    const notificationsProducer = { notify: jest.fn().mockResolvedValue(undefined) };
 
     const dataSource = {
       transaction: jest.fn().mockImplementation(async (fn: any) =>
@@ -99,7 +99,7 @@ describe('Investment (e2e)', () => {
         { provide: getRepositoryToken(InvestmentSettlement), useValue: settlementRepo },
         { provide: DataSource,                               useValue: dataSource     },
         { provide: WalletService,        useValue: walletService        },
-        { provide: NotificationsService, useValue: notificationsService },
+        { provide: NotificationsProducer, useValue: notificationsProducer },
       ],
     })
       .overrideGuard(GqlJwtAuthGuard)

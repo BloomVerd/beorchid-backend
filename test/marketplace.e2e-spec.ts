@@ -19,7 +19,7 @@ import { FarmHealth } from '../src/modules/health/entities/farm-health.entity';
 import { MarketplaceService } from '../src/modules/marketplace/marketplace.service';
 import { MarketplaceResolver } from '../src/modules/marketplace/marketplace.resolver';
 import { WalletService } from '../src/modules/wallet/wallet.service';
-import { NotificationsService } from '../src/modules/notifications/notifications.service';
+import { NotificationsProducer } from '../src/modules/notifications/notifications.producer';
 import { GqlJwtAuthGuard } from '../src/common/guards';
 import { RolesGuard } from '../src/modules/roles';
 
@@ -75,7 +75,7 @@ describe('Marketplace (e2e)', () => {
       credit: jest.fn().mockResolvedValue(undefined),
     };
 
-    const notificationsService = { create: jest.fn().mockResolvedValue(undefined) };
+    const notificationsProducer = { notify: jest.fn().mockResolvedValue(undefined) };
 
     const dataSource = {
       transaction: jest.fn().mockImplementation(async (fn: any) =>
@@ -119,7 +119,7 @@ describe('Marketplace (e2e)', () => {
         { provide: getRepositoryToken(FarmHealth), useValue: farmHealthRepo },
         { provide: DataSource,                     useValue: dataSource     },
         { provide: WalletService,        useValue: walletService        },
-        { provide: NotificationsService, useValue: notificationsService },
+        { provide: NotificationsProducer, useValue: notificationsProducer },
       ],
     })
       .overrideGuard(GqlJwtAuthGuard)

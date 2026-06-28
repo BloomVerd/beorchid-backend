@@ -7,7 +7,7 @@ import { InvestmentPlan, PlanStatus } from './entities/investment-plan.entity';
 import { InvestmentPurchase, PurchaseStatus } from './entities/investment-purchase.entity';
 import { InvestmentSettlement } from './entities/investment-settlement.entity';
 import { WalletService } from '../wallet/wallet.service';
-import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsProducer } from '../notifications/notifications.producer';
 import { LedgerAccount } from '../wallet/entities/ledger-entry.entity';
 
 const makeRepo = (overrides: Partial<any> = {}) => ({
@@ -59,7 +59,7 @@ describe('InvestmentService', () => {
   let purchaseRepo: ReturnType<typeof makeRepo>;
   let settlementRepo: ReturnType<typeof makeRepo>;
   let walletService: { getOrCreateWallet: jest.Mock; debit: jest.Mock; credit: jest.Mock };
-  let notificationsService: { create: jest.Mock };
+  let notificationsProducer: { notify: jest.Mock };
   let dataSource: any;
 
   beforeEach(async () => {
@@ -67,7 +67,7 @@ describe('InvestmentService', () => {
     purchaseRepo    = makeRepo();
     settlementRepo  = makeRepo();
     walletService   = { getOrCreateWallet: jest.fn(), debit: jest.fn(), credit: jest.fn() };
-    notificationsService = { create: jest.fn() };
+    notificationsProducer = { notify: jest.fn() };
 
     dataSource = {
       transaction: jest.fn().mockImplementation(async (fn: (em: any) => Promise<any>) => {
@@ -91,7 +91,7 @@ describe('InvestmentService', () => {
         { provide: getRepositoryToken(InvestmentSettlement), useValue: settlementRepo  },
         { provide: DataSource,                               useValue: dataSource      },
         { provide: WalletService,        useValue: walletService        },
-        { provide: NotificationsService, useValue: notificationsService },
+        { provide: NotificationsProducer, useValue: notificationsProducer },
       ],
     }).compile();
 
@@ -112,7 +112,7 @@ describe('InvestmentService', () => {
       walletService.debit.mockResolvedValue(undefined);
       const purchase = makePurchase({ units: 5, principal: 250000 });
       purchaseRepo.save.mockResolvedValue(purchase);
-      notificationsService.create.mockResolvedValue(undefined);
+      notificationsProducer.notify.mockResolvedValue(undefined);
 
       const result = await service.purchase('plan-1', 'investor-1', 5);
 
@@ -149,7 +149,7 @@ describe('InvestmentService', () => {
       purchaseRepo.find.mockResolvedValue(purchases);
       walletService.getOrCreateWallet.mockResolvedValue({ id: 'wallet-1' });
       walletService.credit.mockResolvedValue(undefined);
-      notificationsService.create.mockResolvedValue(undefined);
+      notificationsProducer.notify.mockResolvedValue(undefined);
       settlementRepo.save.mockResolvedValue({ id: 'settlement-1' });
     };
 
@@ -216,9 +216,9 @@ describe('InvestmentService', () => {
 
       await service.settle('plan-1', 0, undefined, 'admin-1');
 
-      expect(notificationsService.create).toHaveBeenCalledTimes(2);
-      expect(notificationsService.create).toHaveBeenCalledWith('investor-a', expect.any(Object));
-      expect(notificationsService.create).toHaveBeenCalledWith('investor-b', expect.any(Object));
+      expect(notificationsProducer.notify).toHaveBeenCalledTimes(2);
+      expect(notificationsProducer.notify).toHaveBeenCalledWith('investor-a', expect.any(Object));
+      expect(notificationsProducer.notify).toHaveBeenCalledWith('investor-b', expect.any(Object));
     });
   });
 });

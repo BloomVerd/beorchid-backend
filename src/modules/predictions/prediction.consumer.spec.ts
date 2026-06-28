@@ -6,7 +6,7 @@ import { Prediction, RiskLevel } from './entities/prediction.entity';
 import { PredictionType } from '../farm/entities/image-data.entity';
 import { CropType } from '../farm/entities/farm.entity';
 import { FarmerSettingsService } from '../farmer/farmer-settings.service';
-import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsProducer } from '../notifications/notifications.producer';
 import { NotificationType } from '../notifications/entities/notification.entity';
 import { EmailProducer } from '../email/email.producer';
 import { SmsService } from '../sms/sms.service';
@@ -67,7 +67,7 @@ describe('PredictionConsumer', () => {
     save: jest.Mock;
   };
   let farmerSettingsService: { getOrCreate: jest.Mock };
-  let notificationsService: { create: jest.Mock; pushToStream: jest.Mock };
+  let notificationsProducer: { notify: jest.Mock };
   let emailProducer: { sendPredictionAlert: jest.Mock };
   let smsService: { sendPredictionAlert: jest.Mock };
 
@@ -81,17 +81,7 @@ describe('PredictionConsumer', () => {
     farmerSettingsService = {
       getOrCreate: jest.fn().mockResolvedValue(makeSettings()),
     };
-    notificationsService = {
-      create: jest.fn().mockResolvedValue({
-        id: 'notif-1',
-        title: 'Prediction results for Test Farm',
-        message: '1 high-risk prediction(s) detected.',
-        type: NotificationType.PREDICTION_ALERT,
-        isRead: false,
-        createdAt: new Date(),
-      }),
-      pushToStream: jest.fn(),
-    };
+    notificationsProducer = { notify: jest.fn().mockResolvedValue(undefined) };
     emailProducer = { sendPredictionAlert: jest.fn().mockResolvedValue(undefined) };
     smsService = { sendPredictionAlert: jest.fn().mockResolvedValue(undefined) };
 
@@ -101,7 +91,7 @@ describe('PredictionConsumer', () => {
         { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('http://localhost:8000') } },
         { provide: getRepositoryToken(Prediction), useValue: predictionRepo },
         { provide: FarmerSettingsService, useValue: farmerSettingsService },
-        { provide: NotificationsService, useValue: notificationsService },
+        { provide: NotificationsProducer, useValue: notificationsProducer },
         { provide: EmailProducer, useValue: emailProducer },
         { provide: SmsService, useValue: smsService },
       ],
@@ -128,7 +118,7 @@ describe('PredictionConsumer', () => {
       await consumer.process(makeJob({ farmId: 'missing' }) as any);
 
       expect(predictionRepo.save).not.toHaveBeenCalled();
-      expect(notificationsService.create).not.toHaveBeenCalled();
+      expect(notificationsProducer.notify).not.toHaveBeenCalled();
     });
 
     it('skips when farm has no images with prediction types', async () => {
@@ -140,7 +130,7 @@ describe('PredictionConsumer', () => {
       await consumer.process(makeJob({ farmId: 'farm-1' }) as any);
 
       expect(predictionRepo.save).not.toHaveBeenCalled();
-      expect(notificationsService.create).not.toHaveBeenCalled();
+      expect(notificationsProducer.notify).not.toHaveBeenCalled();
     });
   });
 
@@ -153,39 +143,45 @@ describe('PredictionConsumer', () => {
       return farm;
     };
 
-    it('always creates a Notification record after saving predictions', async () => {
+    it('always queues a notification job after saving predictions', async () => {
       setupFarmWithImage();
 
       await consumer.process(makeJob({ farmId: 'farm-1' }) as any);
 
-      expect(notificationsService.create).toHaveBeenCalledWith(
+      expect(notificationsProducer.notify).toHaveBeenCalledWith(
         'farmer-1',
         expect.objectContaining({
           type: NotificationType.PREDICTION_ALERT,
           title: 'Prediction results for Test Farm',
         }),
+        expect.any(Boolean),
       );
     });
 
-    it('pushes to SSE stream when notifyInApp is true', async () => {
+    it('passes notifyInApp=true to notify when notifyInApp is true', async () => {
       farmerSettingsService.getOrCreate.mockResolvedValue(makeSettings({ notifyInApp: true }));
       setupFarmWithImage();
 
       await consumer.process(makeJob({ farmId: 'farm-1' }) as any);
 
-      expect(notificationsService.pushToStream).toHaveBeenCalledWith(
+      expect(notificationsProducer.notify).toHaveBeenCalledWith(
         'farmer-1',
-        expect.objectContaining({ type: NotificationType.PREDICTION_ALERT }),
+        expect.any(Object),
+        true,
       );
     });
 
-    it('does not push to SSE stream when notifyInApp is false', async () => {
+    it('passes notifyInApp=false to notify when notifyInApp is false', async () => {
       farmerSettingsService.getOrCreate.mockResolvedValue(makeSettings({ notifyInApp: false }));
       setupFarmWithImage();
 
       await consumer.process(makeJob({ farmId: 'farm-1' }) as any);
 
-      expect(notificationsService.pushToStream).not.toHaveBeenCalled();
+      expect(notificationsProducer.notify).toHaveBeenCalledWith(
+        'farmer-1',
+        expect.any(Object),
+        false,
+      );
     });
 
     it('queues email when notifyEmail is true', async () => {
@@ -246,7 +242,7 @@ describe('PredictionConsumer', () => {
 
       await consumer.process(makeJob({ farmId: 'farm-1' }) as any);
 
-      expect(notificationsService.create).not.toHaveBeenCalled();
+      expect(notificationsProducer.notify).not.toHaveBeenCalled();
     });
   });
 
