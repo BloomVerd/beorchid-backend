@@ -10,7 +10,7 @@ import { CropType, Farm } from '../farm/entities/farm.entity';
 import { ImageData, PredictionType } from '../farm/entities/image-data.entity';
 import { GrowthStage } from '../health/entities/health.enums';
 import { FarmerSettingsService } from '../farmer/farmer-settings.service';
-import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsProducer } from '../notifications/notifications.producer';
 import { NotificationType } from '../notifications/entities/notification.entity';
 import { EmailProducer } from '../email/email.producer';
 import { SmsService } from '../sms/sms.service';
@@ -83,7 +83,7 @@ export class PredictionConsumer extends WorkerHost {
     @InjectRepository(Prediction)
     private readonly predictionRepo: Repository<Prediction>,
     private readonly farmerSettingsService: FarmerSettingsService,
-    private readonly notificationsService: NotificationsService,
+    private readonly notificationsProducer: NotificationsProducer,
     private readonly emailProducer: EmailProducer,
     private readonly smsService: SmsService,
   ) {
@@ -212,18 +212,15 @@ export class PredictionConsumer extends WorkerHost {
     );
     const summary = this.buildSummary(records);
 
-    const notification = await this.notificationsService.create(
+    await this.notificationsProducer.notify(
       farm.farmer.id,
       {
         title: `Prediction results for ${farm.name}`,
         message: summary,
         type: NotificationType.PREDICTION_ALERT,
       },
+      settings.notifyInApp,
     );
-
-    if (settings.notifyInApp) {
-      this.notificationsService.pushToStream(farm.farmer.id, notification);
-    }
 
     if (settings.notifyEmail) {
       await this.emailProducer.sendPredictionAlert({

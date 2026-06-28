@@ -22,7 +22,7 @@ import { SubscriptionPlanService } from './subscription-plan.service';
 import { PaymentService } from './payment.service';
 import { FarmerSettingsService } from '../farmer/farmer-settings.service';
 import { Farmer } from '../farmer/entities/farmer.entity';
-import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsProducer } from '../notifications/notifications.producer';
 import { NotificationType } from '../notifications/entities/notification.entity';
 import { EmailProducer } from '../email/email.producer';
 import { SmsService } from '../sms/sms.service';
@@ -43,7 +43,7 @@ export class SubscriptionService {
     private readonly planService: SubscriptionPlanService,
     private readonly paymentService: PaymentService,
     private readonly settingsService: FarmerSettingsService,
-    private readonly notificationsService: NotificationsService,
+    private readonly notificationsProducer: NotificationsProducer,
     private readonly emailProducer: EmailProducer,
     private readonly smsService: SmsService,
   ) {}
@@ -240,15 +240,15 @@ export class SubscriptionService {
       `Your ${plan.displayName} plan is now active. ` +
       `Enjoy ${plan.predictionWeeklyLimit} predictions/week and health reports every ${intervalHours} hour(s).`;
 
-    const notification = await this.notificationsService.create(farmer.id, {
-      title: 'Subscription activated',
-      message: summary,
-      type: NotificationType.SUBSCRIPTION_ACTIVATED,
-    });
-
-    if (settings.notifyInApp) {
-      this.notificationsService.pushToStream(farmer.id, notification);
-    }
+    await this.notificationsProducer.notify(
+      farmer.id,
+      {
+        title: 'Subscription activated',
+        message: summary,
+        type: NotificationType.SUBSCRIPTION_ACTIVATED,
+      },
+      settings.notifyInApp,
+    );
 
     if (settings.notifyEmail) {
       await this.emailProducer.sendSubscriptionActivated({

@@ -12,7 +12,7 @@ import { InvestmentSettlement } from './entities/investment-settlement.entity';
 import { CreatePlanInput } from './inputs/create-plan.input';
 import { WalletService } from '../wallet/wallet.service';
 import { LedgerAccount } from '../wallet/entities/ledger-entry.entity';
-import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsProducer } from '../notifications/notifications.producer';
 import { NotificationType } from '../notifications/entities/notification.entity';
 
 @Injectable()
@@ -26,7 +26,7 @@ export class InvestmentService {
     private readonly settlementRepo: Repository<InvestmentSettlement>,
     private readonly dataSource: DataSource,
     private readonly walletService: WalletService,
-    private readonly notificationsService: NotificationsService,
+    private readonly notificationsProducer: NotificationsProducer,
   ) {}
 
   async createPlan(input: CreatePlanInput, createdBy: string): Promise<InvestmentPlan> {
@@ -94,7 +94,7 @@ export class InvestmentService {
         purchaseRepo.create({ planId, investorId, units, principal, status: PurchaseStatus.ACTIVE, maturesAt }),
       );
 
-      await this.notificationsService.create(investorId, {
+      await this.notificationsProducer.notify(investorId, {
         title: 'Investment purchased',
         message: `You purchased ${units} unit(s) of "${plan.title}" for ${principal / 100} GHS`,
         type: NotificationType.INVESTMENT_PURCHASED,
@@ -126,7 +126,7 @@ export class InvestmentService {
         purchase.settlementLedgerRef = txnId;
         await purchaseRepo.save(purchase);
 
-        await this.notificationsService.create(purchase.investorId, {
+        await this.notificationsProducer.notify(purchase.investorId, {
           title: 'Investment settled',
           message: `Your investment of ${purchase.principal / 100} GHS settled with payout ${Math.max(0, payout) / 100} GHS`,
           type: NotificationType.INVESTMENT_SETTLED,

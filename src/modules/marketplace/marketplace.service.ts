@@ -6,7 +6,14 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, ILike, In, LessThanOrEqual, Not, Repository } from 'typeorm';
+import {
+  DataSource,
+  ILike,
+  In,
+  LessThanOrEqual,
+  Not,
+  Repository,
+} from 'typeorm';
 import * as crypto from 'crypto';
 import { Listing, ListingStatus } from './entities/listing.entity';
 import { FarmHealth } from '../health/entities/farm-health.entity';
@@ -15,7 +22,7 @@ import { Deal, DealStatus } from './entities/deal.entity';
 import { CreateListingInput } from './inputs/create-listing.input';
 import { WalletService } from '../wallet/wallet.service';
 import { LedgerAccount } from '../wallet/entities/ledger-entry.entity';
-import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsProducer } from '../notifications/notifications.producer';
 import { NotificationType } from '../notifications/entities/notification.entity';
 
 @Injectable()
@@ -23,18 +30,23 @@ export class MarketplaceService {
   private readonly logger = new Logger(MarketplaceService.name);
 
   constructor(
-    @InjectRepository(Listing) private readonly listingRepo: Repository<Listing>,
+    @InjectRepository(Listing)
+    private readonly listingRepo: Repository<Listing>,
     @InjectRepository(Offer) private readonly offerRepo: Repository<Offer>,
     @InjectRepository(Deal) private readonly dealRepo: Repository<Deal>,
-    @InjectRepository(FarmHealth) private readonly farmHealthRepo: Repository<FarmHealth>,
+    @InjectRepository(FarmHealth)
+    private readonly farmHealthRepo: Repository<FarmHealth>,
     private readonly dataSource: DataSource,
     private readonly walletService: WalletService,
-    private readonly notificationsService: NotificationsService,
+    private readonly notificationsProducer: NotificationsProducer,
   ) {}
 
   // ── Listings ────────────────────────────────────────────────────────────────
 
-  async createListing(input: CreateListingInput, sellerId: string): Promise<Listing> {
+  async createListing(
+    input: CreateListingInput,
+    sellerId: string,
+  ): Promise<Listing> {
     const listing = this.listingRepo.create({
       ...input,
       sellerId,
@@ -82,16 +94,25 @@ export class MarketplaceService {
 
   async withdrawListing(id: string, sellerId: string): Promise<Listing> {
     const listing = await this.findListingById(id);
-    if (listing.sellerId !== sellerId) throw new ForbiddenException('Not your listing');
+    if (listing.sellerId !== sellerId)
+      throw new ForbiddenException('Not your listing');
     listing.status = ListingStatus.WITHDRAWN;
     return this.listingRepo.save(listing);
   }
 
   // ── Offers ─────────────────────────────────────────────────────────────────
 
-  async makeOffer(listingId: string, buyerId: string, amount: number, message?: string): Promise<Offer> {
+  async makeOffer(
+    listingId: string,
+    buyerId: string,
+    amount: number,
+    message?: string,
+  ): Promise<Offer> {
     const listing = await this.findListingById(listingId);
-    if (listing.status !== ListingStatus.OPEN && listing.status !== ListingStatus.UNDER_OFFER) {
+    if (
+      listing.status !== ListingStatus.OPEN &&
+      listing.status !== ListingStatus.UNDER_OFFER
+    ) {
       throw new BadRequestException('Listing is not open for offers');
     }
 
@@ -111,18 +132,27 @@ export class MarketplaceService {
       await this.listingRepo.save(listing);
     }
 
-    this.notificationsService
-      .create(listing.sellerId, {
+    this.notificationsProducer
+      .notify(listing.sellerId, {
         title: 'New offer received',
         message: `You received an offer of ${amount / 100} GHS on your listing`,
         type: NotificationType.OFFER_RECEIVED,
       })
-      .catch((err) => this.logger.error(`Failed to notify seller ${listing.sellerId} of new offer: ${err.message}`));
+      .catch((err) =>
+        this.logger.error(
+          `Failed to notify seller ${listing.sellerId} of new offer: ${err.message}`,
+        ),
+      );
 
     return offer;
   }
 
-  async counterOffer(offerId: string, actorId: string, amount: number, message?: string): Promise<Offer> {
+  async counterOffer(
+    offerId: string,
+    actorId: string,
+    amount: number,
+    message?: string,
+  ): Promise<Offer> {
     const original = await this.offerRepo.findOne({ where: { id: offerId } });
     if (!original) throw new NotFoundException('Offer not found');
 
@@ -141,7 +171,7 @@ export class MarketplaceService {
       }),
     );
 
-    await this.notificationsService.create(original.buyerId, {
+    await this.notificationsProducer.notify(original.buyerId, {
       title: 'Counter offer received',
       message: `A counter offer of ${amount / 100} GHS was made on your offer`,
       type: NotificationType.OFFER_COUNTERED,
@@ -156,11 +186,18 @@ export class MarketplaceService {
       const listingRepo = em.getRepository(Listing);
       const dealRepo = em.getRepository(Deal);
 
-      const offer = await offerRepo.findOne({ where: { id: offerId }, lock: { mode: 'pessimistic_write' } });
+      const offer = await offerRepo.findOne({
+        where: { id: offerId },
+        lock: { mode: 'pessimistic_write' },
+      });
       if (!offer) throw new NotFoundException('Offer not found');
-      if (offer.status !== OfferStatus.PENDING) throw new BadRequestException('Offer is not pending');
+      if (offer.status !== OfferStatus.PENDING)
+        throw new BadRequestException('Offer is not pending');
 
-      const listing = await listingRepo.findOne({ where: { id: offer.listingId }, lock: { mode: 'pessimistic_write' } });
+      const listing = await listingRepo.findOne({
+        where: { id: offer.listingId },
+        lock: { mode: 'pessimistic_write' },
+      });
       if (!listing) throw new NotFoundException('Listing not found');
       if (listing.sellerId !== actorId && offer.buyerId !== actorId) {
         throw new ForbiddenException('Not authorised to accept this offer');
@@ -175,11 +212,14 @@ export class MarketplaceService {
         .createQueryBuilder()
         .update(Offer)
         .set({ status: OfferStatus.REJECTED })
-        .where('listingId = :listingId AND status = :status AND id != :offerId', {
-          listingId: listing.id,
-          status: OfferStatus.PENDING,
-          offerId,
-        })
+        .where(
+          'listingId = :listingId AND status = :status AND id != :offerId',
+          {
+            listingId: listing.id,
+            status: OfferStatus.PENDING,
+            offerId,
+          },
+        )
         .execute();
 
       // Mark listing accepted
@@ -187,9 +227,17 @@ export class MarketplaceService {
       await listingRepo.save(listing);
 
       // Move buyer funds to escrow
-      const buyerWallet = await this.walletService.getOrCreateWallet(offer.buyerId);
+      const buyerWallet = await this.walletService.getOrCreateWallet(
+        offer.buyerId,
+      );
       const txnId = crypto.randomUUID();
-      await this.walletService.debit(buyerWallet.id, offer.amount, LedgerAccount.ESCROW, txnId, em);
+      await this.walletService.debit(
+        buyerWallet.id,
+        offer.amount,
+        LedgerAccount.ESCROW,
+        txnId,
+        em,
+      );
 
       // Create deal
       const deal = await dealRepo.save(
@@ -204,12 +252,12 @@ export class MarketplaceService {
         }),
       );
 
-      await this.notificationsService.create(offer.buyerId, {
+      await this.notificationsProducer.notify(offer.buyerId, {
         title: 'Offer accepted',
         message: `Your offer of ${offer.amount / 100} GHS was accepted`,
         type: NotificationType.OFFER_ACCEPTED,
       });
-      await this.notificationsService.create(listing.sellerId, {
+      await this.notificationsProducer.notify(listing.sellerId, {
         title: 'Deal in escrow',
         message: `Funds of ${offer.amount / 100} GHS are now held in escrow`,
         type: NotificationType.DEAL_PAYMENT_REQUIRED,
@@ -223,10 +271,11 @@ export class MarketplaceService {
     const offer = await this.offerRepo.findOne({ where: { id: offerId } });
     if (!offer) throw new NotFoundException('Offer not found');
     const listing = await this.findListingById(offer.listingId);
-    if (listing.sellerId !== sellerId) throw new ForbiddenException('Not your listing');
+    if (listing.sellerId !== sellerId)
+      throw new ForbiddenException('Not your listing');
     offer.status = OfferStatus.REJECTED;
 
-    await this.notificationsService.create(offer.buyerId, {
+    await this.notificationsProducer.notify(offer.buyerId, {
       title: 'Offer rejected',
       message: 'Your offer was rejected',
       type: NotificationType.OFFER_REJECTED,
@@ -236,40 +285,69 @@ export class MarketplaceService {
   }
 
   async withdrawOffer(offerId: string, buyerId: string): Promise<Offer> {
-    const offer = await this.offerRepo.findOne({ where: { id: offerId, buyerId } });
+    const offer = await this.offerRepo.findOne({
+      where: { id: offerId, buyerId },
+    });
     if (!offer) throw new NotFoundException('Offer not found or not yours');
-    if (offer.status !== OfferStatus.PENDING) throw new BadRequestException('Can only withdraw pending offers');
+    if (offer.status !== OfferStatus.PENDING)
+      throw new BadRequestException('Can only withdraw pending offers');
     offer.status = OfferStatus.WITHDRAWN;
     return this.offerRepo.save(offer);
   }
 
   listingOffers(listingId: string): Promise<Offer[]> {
-    return this.offerRepo.find({ where: { listingId }, order: { createdAt: 'DESC' } });
+    return this.offerRepo.find({
+      where: { listingId },
+      order: { createdAt: 'DESC' },
+    });
   }
 
   myOffers(buyerId: string): Promise<Offer[]> {
-    return this.offerRepo.find({ where: { buyerId }, order: { createdAt: 'DESC' } });
+    return this.offerRepo.find({
+      where: { buyerId },
+      order: { createdAt: 'DESC' },
+    });
   }
 
   myDeals(userId: string): Promise<Deal[]> {
-    return this.dealRepo.find({ where: [{ buyerId: userId }, { sellerId: userId }], order: { createdAt: 'DESC' } });
+    return this.dealRepo.find({
+      where: [{ buyerId: userId }, { sellerId: userId }],
+      order: { createdAt: 'DESC' },
+    });
   }
 
   async confirmDealPayment(dealId: string, buyerId: string): Promise<Deal> {
-    const deal = await this.dealRepo.findOne({ where: { id: dealId, buyerId } });
-    if (!deal) throw new NotFoundException('Deal not found');
+    const saved = await this.dataSource.transaction(async (em) => {
+      const dealRepo = em.getRepository(Deal);
 
-    deal.status = DealStatus.COMPLETED;
-    const saved = await this.dealRepo.save(deal);
+      const deal = await dealRepo.findOne({
+        where: { id: dealId, buyerId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!deal) throw new NotFoundException('Deal not found');
+      if (deal.status === DealStatus.COMPLETED)
+        throw new BadRequestException('Deal already completed');
 
-    // Release escrow to seller
-    const sellerWallet = await this.walletService.getOrCreateWallet(deal.sellerId);
-    const txnId = crypto.randomUUID();
-    await this.walletService.credit(sellerWallet.id, deal.amount, LedgerAccount.USER_CASH, txnId);
+      deal.status = DealStatus.COMPLETED;
+      const result = await dealRepo.save(deal);
 
-    await this.notificationsService.create(deal.sellerId, {
+      // Release escrow to seller
+      const sellerWallet = await this.walletService.getOrCreateWallet(deal.sellerId);
+      const txnId = crypto.randomUUID();
+      await this.walletService.credit(
+        sellerWallet.id,
+        deal.amount,
+        LedgerAccount.USER_CASH,
+        txnId,
+        em,
+      );
+
+      return result;
+    });
+
+    await this.notificationsProducer.notify(saved.sellerId, {
       title: 'Deal completed',
-      message: `Payment of ${deal.amount / 100} GHS has been released to your wallet`,
+      message: `Payment of ${saved.amount / 100} GHS has been released to your wallet`,
       type: NotificationType.DEAL_COMPLETED,
     });
 

@@ -25,7 +25,7 @@ import { CropType } from '../farm/entities/farm.entity';
 import { Prediction } from '../predictions/entities/prediction.entity';
 import { FarmerSettingsService } from '../farmer/farmer-settings.service';
 import { IotCommandType } from '../farm/entities/iot-tool-call.entity';
-import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsProducer } from '../notifications/notifications.producer';
 import { NotificationType } from '../notifications/entities/notification.entity';
 import { EmailProducer } from '../email/email.producer';
 import { SmsService } from '../sms/sms.service';
@@ -117,7 +117,7 @@ export class HealthConsumer extends WorkerHost {
     @InjectRepository(Prediction)
     private readonly predictionRepo: Repository<Prediction>,
     private readonly farmerSettingsService: FarmerSettingsService,
-    private readonly notificationsService: NotificationsService,
+    private readonly notificationsProducer: NotificationsProducer,
     private readonly emailProducer: EmailProducer,
     private readonly smsService: SmsService,
   ) {
@@ -238,17 +238,15 @@ export class HealthConsumer extends WorkerHost {
                 input.device_id;
               const msg = `Action recommended for your farm: ${input.command_type} on device "${deviceLabel}"${input.parameters ? ` (${JSON.stringify(input.parameters)})` : ''}.`;
               if (farm?.farmer?.id) {
-                const notif = await this.notificationsService.create(
+                await this.notificationsProducer.notify(
                   farm.farmer.id,
                   {
                     title: 'Device action recommended',
                     message: msg,
                     type: NotificationType.HEALTH_ALERT,
                   },
+                  settings?.notifyInApp ?? false,
                 );
-                if (settings?.notifyInApp) {
-                  this.notificationsService.pushToStream(farm.farmer.id, notif);
-                }
               }
               content = `Notification sent to farmer: ${msg}`;
             } catch (err) {
@@ -434,18 +432,15 @@ export class HealthConsumer extends WorkerHost {
       healthAlerts ?? [],
     );
 
-    const notification = await this.notificationsService.create(
+    await this.notificationsProducer.notify(
       farm.farmer.id,
       {
         title: `Health alert for ${farm.name}`,
         message: summary,
         type: NotificationType.HEALTH_ALERT,
       },
+      settings.notifyInApp,
     );
-
-    if (settings.notifyInApp) {
-      this.notificationsService.pushToStream(farm.farmer.id, notification);
-    }
 
     if (settings.notifyEmail) {
       await this.emailProducer.sendHealthAlert({

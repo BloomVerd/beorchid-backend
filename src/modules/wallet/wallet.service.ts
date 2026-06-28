@@ -81,8 +81,13 @@ export class WalletService {
     transactionId: string,
     em?: any,
   ): Promise<void> {
-    const repo = em ? em.getRepository(Wallet) : this.walletRepo;
-    const ledgerRepo = em ? em.getRepository(LedgerEntry) : this.ledgerRepo;
+    if (!em) {
+      return this.dataSource.transaction((txEm) =>
+        this.debit(walletId, amount, account, transactionId, txEm),
+      );
+    }
+    const repo = em.getRepository(Wallet);
+    const ledgerRepo = em.getRepository(LedgerEntry);
 
     const wallet = await repo.findOne({
       where: { id: walletId },
@@ -112,8 +117,13 @@ export class WalletService {
     transactionId: string,
     em?: any,
   ): Promise<void> {
-    const repo = em ? em.getRepository(Wallet) : this.walletRepo;
-    const ledgerRepo = em ? em.getRepository(LedgerEntry) : this.ledgerRepo;
+    if (!em) {
+      return this.dataSource.transaction((txEm) =>
+        this.credit(walletId, amount, account, transactionId, txEm),
+      );
+    }
+    const repo = em.getRepository(Wallet);
+    const ledgerRepo = em.getRepository(LedgerEntry);
 
     const wallet = await repo.findOne({
       where: { id: walletId },

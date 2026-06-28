@@ -31,7 +31,7 @@ import { PaginatedFarms, PaginatedImages } from './types/farm.types';
 import { PaginatedIotToolCalls } from './types/iot-tool-call.types';
 import { SubscriptionService } from '../payment/subscription.service';
 import { throwSubscriptionLimitError } from 'src/common/exceptions/subscription.exceptions';
-import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsProducer } from '../notifications/notifications.producer';
 import { NotificationType } from '../notifications/entities/notification.entity';
 import { EmailProducer } from '../email/email.producer';
 import { SmsService } from '../sms/sms.service';
@@ -48,7 +48,7 @@ export class FarmService {
     private iotToolCallRepository: Repository<IotToolCall>,
     private configService: ConfigService,
     private subscriptionService: SubscriptionService,
-    private readonly notificationsService: NotificationsService,
+    private readonly notificationsProducer: NotificationsProducer,
     private readonly emailProducer: EmailProducer,
     private readonly smsService: SmsService,
     private readonly farmerSettingsService: FarmerSettingsService,
@@ -350,7 +350,7 @@ export class FarmService {
       farm.farmer.id,
     );
 
-    const notification = await this.notificationsService.create(
+    await this.notificationsProducer.notify(
       farm.farmer.id,
       {
         title: `${farm.name} setup is complete`,
@@ -358,11 +358,8 @@ export class FarmService {
           'Your farm is fully set up. Health monitoring and predictions are now active.',
         type: NotificationType.FARM_SETUP_COMPLETE,
       },
+      settings.notifyInApp,
     );
-
-    if (settings.notifyInApp) {
-      this.notificationsService.pushToStream(farm.farmer.id, notification);
-    }
 
     if (settings.notifyEmail) {
       await this.emailProducer.sendFarmSetupComplete({
