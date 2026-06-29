@@ -44,6 +44,14 @@ export class MarketplaceResolver {
     return this.marketplaceService.findListingById(id);
   }
 
+  @Query(() => [Listing])
+  myListings(
+    @Args('farmId', { nullable: true, type: () => ID }) farmId: string | undefined,
+    @CurrentFarmer() user: Farmer,
+  ): Promise<Listing[]> {
+    return this.marketplaceService.myListings(user.id, farmId);
+  }
+
   @ResolveField('lat', () => Float, { nullable: true })
   async resolvedLat(@Parent() listing: Listing): Promise<number | null> {
     const farm = await this.farmRepo.findOne({ where: { id: listing.farmId }, select: ['id', 'lat'] });

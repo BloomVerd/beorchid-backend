@@ -92,6 +92,12 @@ export class MarketplaceService {
     return listing;
   }
 
+  myListings(sellerId: string, farmId?: string): Promise<Listing[]> {
+    const where: any = { sellerId };
+    if (farmId) where.farmId = farmId;
+    return this.listingRepo.find({ where, order: { createdAt: 'DESC' } });
+  }
+
   async withdrawListing(id: string, sellerId: string): Promise<Listing> {
     const listing = await this.findListingById(id);
     if (listing.sellerId !== sellerId)
