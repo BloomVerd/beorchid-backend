@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
-import { createDatabase } from 'src/common/lib/create-db';
+// import { createDatabase } from 'src/common/lib/create-db';
 import { graphqlUploadExpress } from 'graphql-upload';
 import { ValidationPipe } from '@nestjs/common';
 import { FarmService } from './modules/farm/farm.service';
@@ -9,11 +9,11 @@ import { SubscriptionPlanService } from './modules/payment/subscription-plan.ser
 import { AdminSeedService } from './modules/admin/admin-seed.service';
 
 async function bootstrap() {
-  // Create main database
-  await createDatabase(process.env.DB_NAME!);
+  // // Create main database
+  // await createDatabase(process.env.DB_NAME!);
 
-  // Create test database
-  await createDatabase(process.env.DB_NAME_TEST!);
+  // // Create test database
+  // await createDatabase(process.env.DB_NAME_TEST!);
 
   const app = await NestFactory.create(AppModule, { rawBody: true });
 

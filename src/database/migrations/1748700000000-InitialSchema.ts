@@ -4,9 +4,7 @@ export class InitialSchema1748700000000 implements MigrationInterface {
   name = 'InitialSchema1748700000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
-      `CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`,
-    );
+    await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
 
     // --- Enums ---
     const enums: [string, string[]][] = [
@@ -14,31 +12,67 @@ export class InitialSchema1748700000000 implements MigrationInterface {
       ['farms_size_unit_enum', ['HECTARES']],
       ['farms_farm_type_enum', ['FIELD', 'GREENHOUSE']],
       ['farms_setup_status_enum', ['PENDING', 'IN_PROGRESS', 'COMPLETE']],
-      ['farms_soil_type_enum', ['CLAY', 'SANDY', 'LOAM', 'SILT', 'PEAT', 'CHALK']],
-      ['farms_growth_stage_enum', [
-        'GERMINATION', 'VEGETATIVE', 'FLOWERING', 'FRUITING', 'HARVEST',
-      ]],
-      ['iot_devices_device_type_enum', [
-        'SOIL_MOISTURE_SENSOR', 'WEATHER_STATION', 'IRRIGATION_CONTROLLER',
-        'AERIAL_SCOUT_DRONE', 'FIELD_CAMERA', 'TEMPERATURE_SENSOR',
-        'HUMIDITY_SENSOR', 'OTHER',
-      ]],
+      [
+        'farms_soil_type_enum',
+        ['CLAY', 'SANDY', 'LOAM', 'SILT', 'PEAT', 'CHALK'],
+      ],
+      [
+        'farms_growth_stage_enum',
+        ['GERMINATION', 'VEGETATIVE', 'FLOWERING', 'FRUITING', 'HARVEST'],
+      ],
+      [
+        'iot_devices_device_type_enum',
+        [
+          'SOIL_MOISTURE_SENSOR',
+          'WEATHER_STATION',
+          'IRRIGATION_CONTROLLER',
+          'AERIAL_SCOUT_DRONE',
+          'FIELD_CAMERA',
+          'TEMPERATURE_SENSOR',
+          'HUMIDITY_SENSOR',
+          'OTHER',
+        ],
+      ],
       ['iot_devices_status_enum', ['ONLINE', 'OFFLINE', 'INACTIVE']],
-      ['iot_command_type_enum', [
-        'IRRIGATE', 'STOP_IRRIGATION', 'CAPTURE_IMAGE',
-        'ACTIVATE_SENSOR', 'DEACTIVATE_SENSOR',
-      ]],
-      ['iot_tool_call_status_enum', ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED']],
+      [
+        'iot_command_type_enum',
+        [
+          'IRRIGATE',
+          'STOP_IRRIGATION',
+          'CAPTURE_IMAGE',
+          'ACTIVATE_SENSOR',
+          'DEACTIVATE_SENSOR',
+        ],
+      ],
+      [
+        'iot_tool_call_status_enum',
+        ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED'],
+      ],
       ['chat_messages_role_enum', ['user', 'assistant']],
-      ['predictions_prediction_type_enum', ['DISEASE_PREDICTION', 'YIELD_PREDICTION']],
+      [
+        'predictions_prediction_type_enum',
+        ['DISEASE_PREDICTION', 'YIELD_PREDICTION'],
+      ],
       ['predictions_risk_level_enum', ['low', 'moderate', 'high']],
-      ['crop_field_health_crop_type_enum', ['MAIZE', 'RICE', 'CASSAVA', 'VEGETABLES']],
-      ['crop_field_health_growth_stage_enum', [
-        'GERMINATION', 'VEGETATIVE', 'FLOWERING', 'FRUITING', 'HARVEST',
-      ]],
+      [
+        'crop_field_health_crop_type_enum',
+        ['MAIZE', 'RICE', 'CASSAVA', 'VEGETABLES'],
+      ],
+      [
+        'crop_field_health_growth_stage_enum',
+        ['GERMINATION', 'VEGETATIVE', 'FLOWERING', 'FRUITING', 'HARVEST'],
+      ],
       ['disease_alerts_spread_enum', ['INCREASING', 'STABLE', 'DECREASING']],
       ['health_alerts_severity_enum', ['INFO', 'WARNING', 'CRITICAL']],
-      ['notification_type_enum', ['PREDICTION_ALERT', 'HEALTH_ALERT', 'SUBSCRIPTION_ACTIVATED', 'FARM_SETUP_COMPLETE']],
+      [
+        'notification_type_enum',
+        [
+          'PREDICTION_ALERT',
+          'HEALTH_ALERT',
+          'SUBSCRIPTION_ACTIVATED',
+          'FARM_SETUP_COMPLETE',
+        ],
+      ],
     ];
 
     for (const [name, values] of enums) {
