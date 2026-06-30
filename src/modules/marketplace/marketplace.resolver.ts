@@ -1,4 +1,12 @@
-import { Resolver, Query, Mutation, Args, ID, ResolveField, Parent } from '@nestjs/graphql';
+import {
+  Resolver,
+  Query,
+  Mutation,
+  Args,
+  ID,
+  ResolveField,
+  Parent,
+} from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -22,8 +30,10 @@ export class MarketplaceResolver {
   constructor(
     private readonly marketplaceService: MarketplaceService,
     @InjectRepository(Farm) private readonly farmRepo: Repository<Farm>,
-    @InjectRepository(ImageData) private readonly imageDataRepo: Repository<ImageData>,
-    @InjectRepository(FarmHealth) private readonly farmHealthRepo: Repository<FarmHealth>,
+    @InjectRepository(ImageData)
+    private readonly imageDataRepo: Repository<ImageData>,
+    @InjectRepository(FarmHealth)
+    private readonly farmHealthRepo: Repository<FarmHealth>,
   ) {}
 
   // ── Listings ──────────────────────────────────────────────────────────────
@@ -32,11 +42,19 @@ export class MarketplaceResolver {
   listings(
     @Args('crop', { nullable: true }) crop?: string,
     @Args('region', { nullable: true }) region?: string,
-    @Args('status', { nullable: true, type: () => ListingStatus }) status?: ListingStatus,
+    @Args('status', { nullable: true, type: () => ListingStatus })
+    status?: ListingStatus,
     @Args('maxPrice', { nullable: true, type: () => Float }) maxPrice?: number,
-    @Args('minHealthScore', { nullable: true, type: () => Float }) minHealthScore?: number,
+    @Args('minHealthScore', { nullable: true, type: () => Float })
+    minHealthScore?: number,
   ): Promise<Listing[]> {
-    return this.marketplaceService.listListings(crop, region, status, maxPrice, minHealthScore);
+    return this.marketplaceService.listListings(
+      crop,
+      region,
+      status,
+      maxPrice,
+      minHealthScore,
+    );
   }
 
   @Query(() => Listing)
@@ -46,7 +64,8 @@ export class MarketplaceResolver {
 
   @Query(() => [Listing])
   myListings(
-    @Args('farmId', { nullable: true, type: () => ID }) farmId: string | undefined,
+    @Args('farmId', { nullable: true, type: () => ID })
+    farmId: string | undefined,
     @CurrentFarmer() user: Farmer,
   ): Promise<Listing[]> {
     return this.marketplaceService.myListings(user.id, farmId);
@@ -54,13 +73,19 @@ export class MarketplaceResolver {
 
   @ResolveField('lat', () => Float, { nullable: true })
   async resolvedLat(@Parent() listing: Listing): Promise<number | null> {
-    const farm = await this.farmRepo.findOne({ where: { id: listing.farmId }, select: ['id', 'lat'] });
+    const farm = await this.farmRepo.findOne({
+      where: { id: listing.farmId },
+      select: ['id', 'lat'],
+    });
     return farm?.lat ?? null;
   }
 
   @ResolveField('lon', () => Float, { nullable: true })
   async resolvedLon(@Parent() listing: Listing): Promise<number | null> {
-    const farm = await this.farmRepo.findOne({ where: { id: listing.farmId }, select: ['id', 'lon'] });
+    const farm = await this.farmRepo.findOne({
+      where: { id: listing.farmId },
+      select: ['id', 'lon'],
+    });
     return farm?.lon ?? null;
   }
 
@@ -74,7 +99,9 @@ export class MarketplaceResolver {
   }
 
   @ResolveField('farmHealth', () => FarmHealth, { nullable: true })
-  async resolvedFarmHealth(@Parent() listing: Listing): Promise<FarmHealth | null> {
+  async resolvedFarmHealth(
+    @Parent() listing: Listing,
+  ): Promise<FarmHealth | null> {
     return this.farmHealthRepo.findOne({
       where: { farm: { id: listing.farmId } },
       order: { computed_at: 'DESC' },
@@ -104,7 +131,9 @@ export class MarketplaceResolver {
   // ── Offers ────────────────────────────────────────────────────────────────
 
   @Query(() => [Offer])
-  listingOffers(@Args('listingId', { type: () => ID }) listingId: string): Promise<Offer[]> {
+  listingOffers(
+    @Args('listingId', { type: () => ID }) listingId: string,
+  ): Promise<Offer[]> {
     return this.marketplaceService.listingOffers(listingId);
   }
 
@@ -119,20 +148,32 @@ export class MarketplaceResolver {
   makeOffer(
     @Args('listingId', { type: () => ID }) listingId: string,
     @Args('amount', { type: () => Number }) amount: number,
-    @Args('message', { nullable: true, type: () => String }) message: string | undefined,
+    @Args('message', { nullable: true, type: () => String })
+    message: string | undefined,
     @CurrentFarmer() user: Farmer,
   ): Promise<Offer> {
-    return this.marketplaceService.makeOffer(listingId, user.id, amount, message);
+    return this.marketplaceService.makeOffer(
+      listingId,
+      user.id,
+      amount,
+      message,
+    );
   }
 
   @Mutation(() => Offer)
   counterOffer(
     @Args('offerId', { type: () => ID }) offerId: string,
     @Args('amount', { type: () => Number }) amount: number,
-    @Args('message', { nullable: true, type: () => String }) message: string | undefined,
+    @Args('message', { nullable: true, type: () => String })
+    message: string | undefined,
     @CurrentFarmer() user: Farmer,
   ): Promise<Offer> {
-    return this.marketplaceService.counterOffer(offerId, user.id, amount, message);
+    return this.marketplaceService.counterOffer(
+      offerId,
+      user.id,
+      amount,
+      message,
+    );
   }
 
   @Mutation(() => Deal)

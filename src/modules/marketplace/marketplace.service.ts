@@ -161,6 +161,13 @@ export class MarketplaceService {
   ): Promise<Offer> {
     const original = await this.offerRepo.findOne({ where: { id: offerId } });
     if (!original) throw new NotFoundException('Offer not found');
+    if (original.status !== OfferStatus.PENDING)
+      throw new BadRequestException('Offer is not pending');
+
+    const listing = await this.findListingById(original.listingId);
+    if (listing.sellerId !== actorId && original.buyerId !== actorId) {
+      throw new ForbiddenException('Not authorised to counter this offer');
+    }
 
     original.status = OfferStatus.COUNTERED;
     await this.offerRepo.save(original);
@@ -168,7 +175,7 @@ export class MarketplaceService {
     const counter = await this.offerRepo.save(
       this.offerRepo.create({
         listingId: original.listingId,
-        buyerId: actorId,
+        buyerId: original.buyerId,
         amount,
         message: message ?? null,
         parentOfferId: offerId,
@@ -177,7 +184,9 @@ export class MarketplaceService {
       }),
     );
 
-    await this.notificationsProducer.notify(original.buyerId, {
+    const recipientId =
+      actorId === listing.sellerId ? original.buyerId : listing.sellerId;
+    await this.notificationsProducer.notify(recipientId, {
       title: 'Counter offer received',
       message: `A counter offer of ${amount / 100} GHS was made on your offer`,
       type: NotificationType.OFFER_COUNTERED,

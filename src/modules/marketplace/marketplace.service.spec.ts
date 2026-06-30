@@ -265,6 +265,75 @@ describe('MarketplaceService', () => {
     });
   });
 
+  // ── counterOffer ──────────────────────────────────────────────────────────
+
+  describe('counterOffer', () => {
+    it('preserves the original buyer id when the seller counters', async () => {
+      const offer = makeOffer({ buyerId: 'buyer-1', status: OfferStatus.PENDING });
+      const listing = makeListing({ sellerId: 'seller-1' });
+      offerRepo.findOne.mockResolvedValue(offer);
+      listingRepo.findOne.mockResolvedValue(listing);
+      offerRepo.save.mockImplementation((o) => Promise.resolve(o));
+
+      const result = await service.counterOffer('offer-1', 'seller-1', 150000);
+
+      expect(result.buyerId).toBe('buyer-1');
+    });
+
+    it('marks the original offer as COUNTERED', async () => {
+      const offer = makeOffer({ buyerId: 'buyer-1', status: OfferStatus.PENDING });
+      const listing = makeListing({ sellerId: 'seller-1' });
+      offerRepo.findOne.mockResolvedValue(offer);
+      listingRepo.findOne.mockResolvedValue(listing);
+      offerRepo.save.mockImplementation((o) => Promise.resolve(o));
+
+      await service.counterOffer('offer-1', 'seller-1', 150000);
+
+      expect(offerRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'offer-1', status: OfferStatus.COUNTERED }),
+      );
+    });
+
+    it('throws BadRequestException when the original offer is not pending', async () => {
+      offerRepo.findOne.mockResolvedValue(makeOffer({ status: OfferStatus.ACCEPTED }));
+      await expect(
+        service.counterOffer('offer-1', 'seller-1', 150000),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws ForbiddenException when caller is neither buyer nor seller', async () => {
+      offerRepo.findOne.mockResolvedValue(makeOffer({ buyerId: 'buyer-1', status: OfferStatus.PENDING }));
+      listingRepo.findOne.mockResolvedValue(makeListing({ sellerId: 'seller-1' }));
+      await expect(
+        service.counterOffer('offer-1', 'impostor', 150000),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('notifies the buyer when the seller counters', async () => {
+      const offer = makeOffer({ buyerId: 'buyer-1', status: OfferStatus.PENDING });
+      const listing = makeListing({ sellerId: 'seller-1' });
+      offerRepo.findOne.mockResolvedValue(offer);
+      listingRepo.findOne.mockResolvedValue(listing);
+      offerRepo.save.mockImplementation((o) => Promise.resolve(o));
+
+      await service.counterOffer('offer-1', 'seller-1', 150000);
+
+      expect(notificationsProducer.notify).toHaveBeenCalledWith('buyer-1', expect.any(Object));
+    });
+
+    it('notifies the seller when the buyer counters', async () => {
+      const offer = makeOffer({ buyerId: 'buyer-1', status: OfferStatus.PENDING });
+      const listing = makeListing({ sellerId: 'seller-1' });
+      offerRepo.findOne.mockResolvedValue(offer);
+      listingRepo.findOne.mockResolvedValue(listing);
+      offerRepo.save.mockImplementation((o) => Promise.resolve(o));
+
+      await service.counterOffer('offer-1', 'buyer-1', 150000);
+
+      expect(notificationsProducer.notify).toHaveBeenCalledWith('seller-1', expect.any(Object));
+    });
+  });
+
   // ── rejectOffer ───────────────────────────────────────────────────────────
 
   describe('rejectOffer', () => {
