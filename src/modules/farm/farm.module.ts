@@ -1,3 +1,11 @@
+/**
+ * Farm module — manages farm creation, multi-step setup, image management,
+ * and IoT device provisioning on AWS IoT Core.
+ *
+ * Exports `TypeOrmModule` (so other modules can inject Farm/ImageData/IotDevice
+ * repositories) and `FarmService` (used by Chat and other modules that need
+ * direct farm operations such as `triggerIotDevice`).
+ */
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';

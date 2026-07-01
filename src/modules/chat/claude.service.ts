@@ -15,6 +15,15 @@ import { createLlmClient, getLlmModel } from 'src/common/config/llm.config';
 
 type ChatMessageParam = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 
+/**
+ * Drives the multi-turn LLM conversation loop for the chat module.
+ *
+ * `streamAndProcess()` streams the LLM response, accumulates any tool calls,
+ * executes them against live farm data, appends tool results to the message
+ * history, and repeats until the model produces a final text-only response.
+ * Token deltas and tool-use events are published to the Redis SSE channel as
+ * they arrive so the client sees a live stream.
+ */
 @Injectable()
 export class ClaudeService {
   private readonly llm: OpenAI;
@@ -37,6 +46,18 @@ export class ClaudeService {
     this.model = getLlmModel(this.configService);
   }
 
+  // ── LLM loop ────────────────────────────────────────────────────────────
+
+  /**
+   * Streams the LLM response for the given chat and iterates the tool loop
+   * until the model produces a final text-only reply.
+   *
+   * Token deltas are published to the Redis SSE channel as they arrive.
+   * Tool-use events are published with the tool name so the client can show
+   * "Claude is using get_farm_health…" indicators.
+   *
+   * @returns The final assistant text after all tool calls are resolved.
+   */
   async streamAndProcess(
     chatId: string,
     farmId: string,
@@ -141,6 +162,9 @@ export class ClaudeService {
     }
   }
 
+  // ── Tool dispatch ────────────────────────────────────────────────────────
+
+  /** Dispatches a tool call by name to the appropriate private handler. */
   private async executeTool(
     name: string,
     input: Record<string, unknown>,
@@ -174,6 +198,9 @@ export class ClaudeService {
     }
   }
 
+  // ── Tool implementations ─────────────────────────────────────────────────
+
+  /** Fetches the most recent `FarmHealth` row with all sub-relations for the given farm. */
   private async toolGetFarmHealth(farmId: string) {
     const health = await this.farmHealthRepo.findOne({
       where: { farm: { id: farmId } },
@@ -235,6 +262,7 @@ export class ClaudeService {
     };
   }
 
+  /** Returns the `limit` most-recent predictions for the farm (default 10). */
   private async toolGetPredictions(farmId: string, limit?: number) {
     const predictions = await this.predictionRepo.find({
       where: { farm: { id: farmId } },
@@ -252,6 +280,7 @@ export class ClaudeService {
     }));
   }
 
+  /** Lists all IoT devices registered to the farm. */
   private async toolGetIotDevices(farmId: string) {
     const devices = await this.iotDeviceRepo.find({
       where: { farm: { id: farmId } },
@@ -267,6 +296,7 @@ export class ClaudeService {
     }));
   }
 
+  /** Returns core farm metadata (name, crop type, size, location, setup status). */
   private async toolGetFarmDetails(farmId: string) {
     const farm = await this.farmRepo.findOne({ where: { id: farmId } });
     if (!farm) return { error: 'Farm not found' };
@@ -287,6 +317,9 @@ export class ClaudeService {
     };
   }
 
+  // ── Prompt ───────────────────────────────────────────────────────────────
+
+  /** Builds the system prompt injected at the start of every LLM conversation. */
   private buildSystemPrompt(farmId: string): string {
     return `You are an AI assistant for BeOrchid, an agricultural intelligence platform.
 You help farmers understand the health, risks, and status of their farms.

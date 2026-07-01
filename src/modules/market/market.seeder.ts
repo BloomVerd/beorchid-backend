@@ -2,6 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { MarketService } from './market.service';
 import { PriceType } from './entities/market-price-point.entity';
 
+/**
+ * Seeds the market module with initial crop and price data on application
+ * startup. Generates two years of weekly wholesale price observations for
+ * Maize and Rice across four Ghanaian regions using a random walk around a
+ * base price. Seeding is idempotent — it exits immediately if price data for
+ * Maize already exists.
+ */
 @Injectable()
 export class MarketSeeder {
   constructor(private readonly marketService: MarketService) {}

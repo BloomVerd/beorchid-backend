@@ -3,12 +3,26 @@ import { Job } from 'bullmq';
 import { IngestionService } from './ingestion.service';
 import { IngestionJobStatus } from './entities/data-ingestion-job.entity';
 
+/**
+ * BullMQ consumer for the `ingestion` queue. Processes `DataIngestionJob`
+ * records created by REST file uploads or external feed triggers.
+ *
+ * The current implementation marks jobs PROCESSING → COMPLETED (or FAILED on
+ * error). Actual row-level CSV/JSON parsing is handled by the REST upload
+ * endpoint before enqueuing; extend `process()` here when server-side parsing
+ * is needed.
+ */
 @Processor('ingestion')
 export class IngestionConsumer extends WorkerHost {
   constructor(private readonly ingestionService: IngestionService) {
     super();
   }
 
+  /**
+   * Processes a single ingestion job. Updates job status to PROCESSING on
+   * start, then COMPLETED on success or FAILED (with error details) on
+   * exception.
+   */
   async process(job: Job<{ jobId: string; type: string }>): Promise<void> {
     const { jobId } = job.data;
 

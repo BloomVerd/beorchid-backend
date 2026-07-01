@@ -1,3 +1,11 @@
+/**
+ * Chat module — AI-powered farm assistant with real-time SSE streaming.
+ *
+ * Exposes a REST API for sending prompts and streaming responses. Messages are
+ * processed asynchronously via BullMQ (`chat-queue`); token deltas are relayed
+ * to connected clients through a Redis pub/sub channel (`ChatPubSubService`).
+ * The LLM has access to live farm data via a set of defined tools (`claude.tools.ts`).
+ */
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';

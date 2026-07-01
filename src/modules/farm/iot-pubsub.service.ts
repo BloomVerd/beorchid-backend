@@ -2,6 +2,11 @@ import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 
+/**
+ * Shape of events published on the `iot:{farmId}` Redis channel.
+ * Currently only `tool_call_update` events are emitted, carrying the new
+ * status and optional device response payload.
+ */
 export interface IotSseEvent {
   type: 'tool_call_update';
   farmId: string;
@@ -10,6 +15,11 @@ export interface IotSseEvent {
   response?: Record<string, unknown>;
 }
 
+/**
+ * Redis pub/sub bridge for IoT SSE streaming. Mirrors the pattern used in
+ * `ChatPubSubService`: two separate ioredis connections on the `iot:{farmId}`
+ * channel so the subscriber connection is never blocked by publish commands.
+ */
 @Injectable()
 export class IotPubSubService implements OnModuleInit, OnModuleDestroy {
   private publisher: Redis;
@@ -28,10 +38,16 @@ export class IotPubSubService implements OnModuleInit, OnModuleDestroy {
     this.subscriber.disconnect();
   }
 
+  /** Serialises an `IotSseEvent` and publishes it to the `iot:{farmId}` Redis channel. */
   async publish(farmId: string, event: IotSseEvent): Promise<void> {
     await this.publisher.publish(`iot:${farmId}`, JSON.stringify(event));
   }
 
+  /**
+   * Subscribes to the `iot:{farmId}` Redis channel and yields raw JSON event
+   * strings until the `AbortSignal` is fired (client disconnect). Cleans up
+   * the Redis subscription on exit.
+   */
   async *subscribe(
     farmId: string,
     signal: AbortSignal,

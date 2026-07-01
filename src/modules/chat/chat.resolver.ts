@@ -7,10 +7,17 @@ import { GqlJwtAuthGuard } from 'src/common/guards';
 import { CurrentFarmer } from 'src/common/decorators';
 import { Farmer } from '../farmer/entities/farmer.entity';
 
+/**
+ * GraphQL resolver for the chat module. Exposes the paginated chat-list query.
+ * Message sending and SSE streaming are handled by the REST controller because
+ * GraphQL subscriptions add complexity that isn't needed here — SSE over HTTP
+ * is simpler and browser-native.
+ */
 @Resolver(() => Chat)
 export class ChatResolver {
   constructor(private readonly chatService: ChatService) {}
 
+  /** Returns a paginated list of the authenticated farmer's chat threads ordered by last update. */
   @Query(() => PaginatedChats)
   @UseGuards(GqlJwtAuthGuard)
   getChats(

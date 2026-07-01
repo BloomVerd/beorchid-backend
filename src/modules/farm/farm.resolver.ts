@@ -18,12 +18,20 @@ import { GqlJwtAuthGuard } from 'src/common/guards';
 import { CurrentFarmer } from 'src/common/decorators';
 import { Farmer } from '../farmer/entities/farmer.entity';
 
+/**
+ * GraphQL resolver for the farm module. All operations require JWT authentication
+ * via `GqlJwtAuthGuard`; the authenticated farmer is injected by `@CurrentFarmer()`.
+ *
+ * Covers the full farm lifecycle: creation, setup steps (coordinates, photo, soil
+ * data), image management, IoT device registration/management, and read queries.
+ */
 @Resolver(() => Farm)
 export class FarmResolver {
   constructor(private readonly farmService: FarmService) {}
 
   // ─── Mutations ───────────────────────────────────────────────────────────────
 
+  /** Creates a new farm, respecting the subscription plan's farm limit. */
   @Mutation(() => Farm)
   @UseGuards(GqlJwtAuthGuard)
   addFarm(
@@ -33,6 +41,7 @@ export class FarmResolver {
     return this.farmService.addFarm(farmer.id, input);
   }
 
+  /** Replaces the farm boundary coordinates and recomputes the centre-point. */
   @Mutation(() => Farm)
   @UseGuards(GqlJwtAuthGuard)
   updateFarmCoordinates(
@@ -43,6 +52,7 @@ export class FarmResolver {
     return this.farmService.updateFarmCoordinates(farmer.id, farmId, input);
   }
 
+  /** Saves the farm's setup photo URL and optional GPS coordinates. */
   @Mutation(() => Farm)
   @UseGuards(GqlJwtAuthGuard)
   updateFarmPhoto(
@@ -53,6 +63,7 @@ export class FarmResolver {
     return this.farmService.updateFarmPhoto(farmer.id, farmId, input);
   }
 
+  /** Updates soil type, crop density, and linked IoT device IDs. */
   @Mutation(() => Farm)
   @UseGuards(GqlJwtAuthGuard)
   updateFarmSoilData(
@@ -63,6 +74,7 @@ export class FarmResolver {
     return this.farmService.updateFarmSoilData(farmer.id, farmId, input);
   }
 
+  /** Marks the farm COMPLETE and dispatches setup-complete notifications. */
   @Mutation(() => Farm)
   @UseGuards(GqlJwtAuthGuard)
   completeSetup(
@@ -89,6 +101,7 @@ export class FarmResolver {
     return this.farmService.uploadFarmImages(farmer.id, farmId, input);
   }
 
+  /** Provisions an AWS IoT Thing + X.509 certificate and persists the device. */
   @Mutation(() => IotDevice)
   @UseGuards(GqlJwtAuthGuard)
   registerIotDevice(
@@ -99,6 +112,7 @@ export class FarmResolver {
     return this.farmService.registerIotDevice(farmer.id, farmId, input);
   }
 
+  /** Detaches and deletes the IoT Thing + certificate from AWS and the database. */
   @Mutation(() => Boolean)
   @UseGuards(GqlJwtAuthGuard)
   deleteIotDevice(
@@ -109,6 +123,7 @@ export class FarmResolver {
     return this.farmService.deleteIotDevice(farmer.id, farmId, deviceId);
   }
 
+  /** Activates the device certificate in AWS IoT and sets `is_active = true`. */
   @Mutation(() => IotDevice)
   @UseGuards(GqlJwtAuthGuard)
   activateIotDevice(
@@ -119,6 +134,7 @@ export class FarmResolver {
     return this.farmService.activateIotDevice(farmer.id, farmId, deviceId);
   }
 
+  /** Erases certificate/key fields from the DB after the farmer downloads the credential bundle. */
   @Mutation(() => Boolean)
   @UseGuards(GqlJwtAuthGuard)
   clearIotDeviceCert(
@@ -129,6 +145,7 @@ export class FarmResolver {
     return this.farmService.clearIotDeviceCert(farmer.id, farmId, deviceId);
   }
 
+  /** Sends a command to an active IoT device via an AWS IoT Job and returns the tracking record. */
   @Mutation(() => IotToolCall)
   @UseGuards(GqlJwtAuthGuard)
   triggerIotDevice(
@@ -140,6 +157,7 @@ export class FarmResolver {
     return this.farmService.triggerIotDevice(farmer.id, farmId, deviceId, input);
   }
 
+  /** Deletes a single farm image record. */
   @Mutation(() => Boolean)
   @UseGuards(GqlJwtAuthGuard)
   deleteFarmImage(
@@ -152,6 +170,7 @@ export class FarmResolver {
 
   // ─── Queries ─────────────────────────────────────────────────────────────────
 
+  /** Returns a paginated list of the authenticated farmer's farms. */
   @Query(() => PaginatedFarms)
   @UseGuards(GqlJwtAuthGuard)
   listFarms(
@@ -162,12 +181,14 @@ export class FarmResolver {
     return this.farmService.listFarms(farmer.id, page, limit);
   }
 
+  /** Returns a single farm with coordinates, images, and IoT devices. */
   @Query(() => Farm)
   @UseGuards(GqlJwtAuthGuard)
   getFarm(@Args('farmId') farmId: string, @CurrentFarmer() farmer: Farmer) {
     return this.farmService.getFarm(farmer.id, farmId);
   }
 
+  /** Returns the last 24 hours of IoT tool calls for a farm, paginated. */
   @Query(() => PaginatedIotToolCalls)
   @UseGuards(GqlJwtAuthGuard)
   listIotToolCalls(
@@ -179,6 +200,7 @@ export class FarmResolver {
     return this.farmService.listIotToolCalls(farmer.id, farmId, page, limit);
   }
 
+  /** Returns paginated farm images, optionally filtered by year, month, and week number. */
   @Query(() => PaginatedImages)
   @UseGuards(GqlJwtAuthGuard)
   listFarmImages(

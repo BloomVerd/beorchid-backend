@@ -13,6 +13,19 @@ import { PaymentTransaction } from './entities/payment-transaction.entity';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 
+/**
+ * REST controller for Paystack payment webhooks. Mounted at
+ * `POST /api/payment/webhook`.
+ *
+ * On every `charge.success` event:
+ *  1. Verifies the `x-paystack-signature` header using HMAC-SHA512.
+ *  2. Looks up whether a `PaymentTransaction` row exists for the reference.
+ *     - If yes → subscription payment: delegates to `SubscriptionService.activateSubscription`.
+ *     - If no  → direct wallet deposit: delegates to `WalletService.handleDepositWebhook`.
+ *
+ * NestJS must be configured to expose `req.rawBody` (Buffer) for signature
+ * verification to work — enable `rawBody: true` in `NestFactory.create`.
+ */
 @Controller('api/payment')
 export class PaymentController {
   constructor(
@@ -23,6 +36,13 @@ export class PaymentController {
     private readonly transactionRepo: Repository<PaymentTransaction>,
   ) {}
 
+  /**
+   * Handles Paystack `charge.success` webhooks. Verifies the signature,
+   * dispatches to either `SubscriptionService` or `WalletService`, and
+   * returns `{ ok: true }` with HTTP 200 on success.
+   *
+   * @throws UnauthorizedException if the raw body is missing or the signature is invalid
+   */
   @Post('webhook')
   @HttpCode(200)
   async handleWebhook(

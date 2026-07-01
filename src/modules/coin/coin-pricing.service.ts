@@ -5,6 +5,32 @@ import { Coin } from './entities/coin.entity';
 import { CoinPricePoint } from './entities/coin-price-point.entity';
 import { MarketService } from '../market/market.service';
 
+/**
+ * Service responsible for computing and persisting coin prices from market data.
+ *
+ * Pricing formula:
+ * ```
+ * multiplier = clamp(
+ *   1 + w_trend × normalizedPriceChange
+ *     + w_demand × demandFactor
+ *     + w_health × normalizedAvgFarmHealth
+ *     + w_vol   × volatilityAdjustment,
+ *   0.25, 4.0
+ * )
+ * newPrice = round(basePrice × multiplier)
+ * ```
+ *
+ * Factor sources:
+ *  - `normalizedPriceChange` — (avgRecent − avgOlder) / avgOlder, clamped to [-1, 1],
+ *    comparing the last 30 days of market prices vs the 30–60-day window.
+ *  - `demandFactor` — currently 0 (placeholder for future order-book data).
+ *  - `normalizedAvgFarmHealth` — currently 0 (placeholder for health pipeline data).
+ *  - `volatilityAdjustment` — negative dampener: −min(1, stddev / avgRecent)
+ *    on the last-30-day price series.
+ *
+ * Per-coin weights (`w_trend`, `w_demand`, `w_health`, `w_vol`) default to
+ * `{ 0.3, 0.2, 0.3, 0.2 }` and are configurable on the `Coin` entity.
+ */
 @Injectable()
 export class CoinPricingService {
   constructor(
@@ -13,6 +39,12 @@ export class CoinPricingService {
     private readonly marketService: MarketService,
   ) {}
 
+  /**
+   * Recomputes the price for a single coin, persists a `CoinPricePoint` row,
+   * and updates `coin.currentPrice`.
+   *
+   * @throws NotFoundException if the coin does not exist
+   */
   async recompute(coinId: string): Promise<CoinPricePoint> {
     const coin = await this.coinRepo.findOne({ where: { id: coinId } });
     if (!coin) throw new NotFoundException(`Coin ${coinId} not found`);
@@ -75,6 +107,10 @@ export class CoinPricingService {
     return point;
   }
 
+  /**
+   * Recomputes prices for all coins linked to the given crop. Called by the
+   * `coin-price-recompute` consumer when market data for a crop changes.
+   */
   async recomputeForCrop(cropId: string): Promise<void> {
     const coins = await this.coinRepo.find({ where: { cropId } });
     for (const coin of coins) {

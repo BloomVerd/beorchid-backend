@@ -25,6 +25,18 @@ interface PaystackVerifyResponse {
   };
 }
 
+/**
+ * Thin Paystack API client for payment initialization, transaction
+ * verification, and webhook signature validation.
+ *
+ * Used by:
+ *  - `SubscriptionService` — to initiate and verify subscription payments.
+ *  - `WalletService` — to initiate deposit transactions.
+ *  - `PaymentController` — to verify `x-paystack-signature` on incoming webhooks.
+ *
+ * All outbound API calls use `fetch`. On non-OK responses, the raw Paystack
+ * error body is included in the `InternalServerErrorException` message.
+ */
 @Injectable()
 export class PaymentService {
   private readonly secretKey: string;
@@ -35,6 +47,12 @@ export class PaymentService {
       this.configService.get<string>('PAYSTACK_SECRET_KEY') ?? '';
   }
 
+  /**
+   * Calls `POST /transaction/initialize` on the Paystack API and returns the
+   * checkout URL and access code.
+   *
+   * @throws InternalServerErrorException if the Paystack API returns a non-OK response
+   */
   async initializeTransaction(
     email: string,
     amount: number,
@@ -73,6 +91,12 @@ export class PaymentService {
     };
   }
 
+  /**
+   * Calls `GET /transaction/verify/:reference` and returns Paystack's
+   * transaction data (status, amount, customer, metadata).
+   *
+   * @throws InternalServerErrorException if the Paystack API returns a non-OK response
+   */
   async verifyTransaction(
     reference: string,
   ): Promise<PaystackVerifyResponse['data']> {
@@ -94,6 +118,10 @@ export class PaymentService {
     return result.data;
   }
 
+  /**
+   * Verifies a Paystack webhook signature using HMAC-SHA512 over the raw
+   * request body. Returns `true` if the signature matches.
+   */
   verifyWebhookSignature(rawBody: Buffer, signature: string): boolean {
     const hash = crypto
       .createHmac('sha512', this.secretKey)

@@ -7,6 +7,12 @@ import { Farmer } from '../farmer/entities/farmer.entity';
 import { HashHelper } from 'src/common/lib';
 import { EmailProducer } from '../email/email.producer';
 
+/**
+ * Bootstraps the initial super-admin account on application startup.
+ * Called once from `AppModule` via `OnApplicationBootstrap`. The operation
+ * is idempotent — if a user with `SUPER_ADMIN_EMAIL` already exists, it returns
+ * immediately without making any changes.
+ */
 @Injectable()
 export class AdminSeedService {
   constructor(
@@ -15,6 +21,13 @@ export class AdminSeedService {
     private readonly configService: ConfigService,
   ) {}
 
+  /**
+   * Creates the super-admin `Farmer` record if one does not already exist.
+   * Generates a random 12-byte password, hashes it, saves the record, and
+   * dispatches the `super-admin-credentials` email so the admin receives
+   * their initial login details. No-ops when `SUPER_ADMIN_EMAIL` is not set
+   * or when the account already exists.
+   */
   async seedSuperAdmin(): Promise<void> {
     const email = this.configService.get<string>('SUPER_ADMIN_EMAIL');
     if (!email) {

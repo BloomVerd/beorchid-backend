@@ -7,10 +7,18 @@ import { GqlJwtAuthGuard } from 'src/common/guards';
 import { CurrentFarmer } from 'src/common/decorators';
 import { Farmer } from '../farmer/entities/farmer.entity';
 
+/**
+ * GraphQL resolver for prediction operations. All operations require JWT authentication.
+ * The mutation is fire-and-forget; the response is an acknowledgement message.
+ */
 @Resolver()
 export class PredictionResolver {
   constructor(private readonly predictionService: PredictionService) {}
 
+  /**
+   * Enqueues a prediction job for the farm after enforcing the weekly limit.
+   * Returns immediately with an acknowledgement; poll `listFarmPredictions` for results.
+   */
   @Mutation(() => GenerateFarmPredictionResponse)
   @UseGuards(GqlJwtAuthGuard)
   generateFarmPredictions(
@@ -20,6 +28,7 @@ export class PredictionResolver {
     return this.predictionService.generateFarmPredictions(farmer.email, farmId);
   }
 
+  /** Returns paginated predictions for a farm, optionally filtered by year/month/week. */
   @Query(() => PaginatedPredictions)
   @UseGuards(GqlJwtAuthGuard)
   listFarmPredictions(

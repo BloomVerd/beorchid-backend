@@ -10,6 +10,15 @@ import { FarmerSettingsService } from './farmer-settings.service';
 import { FarmerSettingsResolver } from './farmer-settings.resolver';
 import { JwtStrategy } from 'src/common/strategies';
 
+/**
+ * Core identity module. Owns `Farmer` accounts and `FarmerSettings`. Exports
+ * `FarmerService`, `FarmerSettingsService`, and `TypeOrmModule` (with both
+ * repositories) so other modules can access farmer data without re-registering
+ * the entities or creating circular imports.
+ *
+ * Registers `JwtModule` for token signing and `JwtStrategy` for JWT validation
+ * so both are available to any module that imports `FarmerModule`.
+ */
 @Module({
   imports: [
     ConfigModule,

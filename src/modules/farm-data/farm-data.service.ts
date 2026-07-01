@@ -17,6 +17,19 @@ interface CachedFarmData {
   yield?: YieldSection;
 }
 
+/**
+ * Manages the Redis-backed cache for farm dashboard data.
+ *
+ * Cache key `farm_data:{farmId}` holds the fully-rendered dashboard JSON (TTL
+ * configurable per farmer). Key `farm_data_pending:{farmId}` (TTL 300 s) is a
+ * deduplication lock that prevents multiple identical jobs from being enqueued
+ * while one is already running.
+ *
+ * `getFarmData()` implements the read-through pattern:
+ * 1. Return READY from cache if present.
+ * 2. Return PENDING if the dedup lock is set.
+ * 3. Otherwise set the lock, enqueue a job, and return PENDING.
+ */
 @Injectable()
 export class FarmDataService implements OnModuleInit, OnModuleDestroy {
   private redis: Redis;
@@ -34,6 +47,13 @@ export class FarmDataService implements OnModuleInit, OnModuleDestroy {
     this.redis.disconnect();
   }
 
+  // ── Read-through cache ───────────────────────────────────────────────────
+
+  /**
+   * Returns cached dashboard data if available, or enqueues generation and
+   * returns `{ status: PENDING }`. Deduplicates concurrent requests via a
+   * 300-second Redis lock key.
+   */
   async getFarmData(farmId: string): Promise<FarmDataResult> {
     const cached = await this.redis.get(`farm_data:${farmId}`);
     if (cached) {
@@ -52,6 +72,12 @@ export class FarmDataService implements OnModuleInit, OnModuleDestroy {
     return { status: FarmDataStatus.PENDING };
   }
 
+  // ── Worker helpers ───────────────────────────────────────────────────────
+
+  /**
+   * Persists the LLM-generated dashboard data to Redis and clears the pending lock.
+   * Called by the consumer after a successful generation.
+   */
   async cacheResult(
     farmId: string,
     data: CachedFarmData,
@@ -66,6 +92,7 @@ export class FarmDataService implements OnModuleInit, OnModuleDestroy {
     await this.redis.del(`farm_data_pending:${farmId}`);
   }
 
+  /** Removes the pending dedup lock so the next query can trigger a fresh generation. */
   async clearPending(farmId: string): Promise<void> {
     await this.redis.del(`farm_data_pending:${farmId}`);
   }

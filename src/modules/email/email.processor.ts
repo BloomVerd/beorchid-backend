@@ -2,12 +2,19 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { EmailService } from './email.service';
 
+/**
+ * BullMQ worker for the `email` queue. Dispatches each job name to the
+ * corresponding `EmailService` method. Retries are handled by BullMQ's
+ * default exponential back-off; failed jobs land in the `failed` bucket
+ * for inspection.
+ */
 @Processor('email')
 export class EmailProcessor extends WorkerHost {
   constructor(private readonly emailService: EmailService) {
     super();
   }
 
+  /** Routes each job by name to the appropriate `EmailService` send method. */
   async process(job: Job): Promise<void> {
     switch (job.name) {
       case 'send-magic-link': {

@@ -11,6 +11,25 @@ import { NotificationsProducer } from './notifications.producer';
 import { NotificationsConsumer } from './notifications.consumer';
 import { FarmerModule } from '../farmer/farmer.module';
 
+/**
+ * Notifications module — async notification delivery with SSE live-push.
+ *
+ * Notification pipeline:
+ *  1. Any module calls `NotificationsProducer.notify(farmerId, dto, pushToStream?)`.
+ *  2. The job lands on the `notifications` BullMQ queue.
+ *  3. `NotificationsConsumer` picks it up, persists a `Notification` row via
+ *     `NotificationsService.create`, then optionally calls `pushToStream` to
+ *     push the record onto the farmer's in-memory `Subject<Notification>`.
+ *  4. The SSE endpoint (`GET /notifications/stream?token=<jwt>`) streams
+ *     events to the client. JWT is passed as a query param because EventSource
+ *     does not support custom headers.
+ *
+ * `pushToStream` defaults to `false` in `NotificationsProducer.notify()` —
+ * pass `true` to enable real-time SSE delivery in addition to DB persistence.
+ *
+ * Exports `NotificationsService` and `NotificationsProducer` for use by other
+ * modules (marketplace, payment, health, etc.).
+ */
 @Module({
   imports: [
     ConfigModule,

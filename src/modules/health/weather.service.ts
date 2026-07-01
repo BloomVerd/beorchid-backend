@@ -34,11 +34,20 @@ function wmoToDescription(code: number): { description: string; icon: string } {
   return { description: 'Unknown', icon: 'cloud' };
 }
 
+/**
+ * Fetches 7-day weather forecasts from the Open-Meteo API (no API key required).
+ * Translates WMO weather codes to human-readable descriptions and icon names.
+ * Returns an empty array on any network or HTTP error so callers degrade gracefully.
+ */
 @Injectable()
 export class WeatherService {
   private readonly logger = new Logger(WeatherService.name);
   private readonly baseUrl = 'https://api.open-meteo.com/v1/forecast';
 
+  /**
+   * Fetches a 7-day daily weather forecast for the given coordinates.
+   * Returns `[]` if the API is unreachable or returns a non-200 status.
+   */
   async getForecast(lat: number, lon: number): Promise<WeatherForecast[]> {
     const params = new URLSearchParams({
       latitude: String(lat),

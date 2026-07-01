@@ -4,6 +4,11 @@ import { ChatService } from './chat.service';
 import { ClaudeService } from './claude.service';
 import { ChatPubSubService } from './chat-pubsub.service';
 
+/**
+ * BullMQ worker for the `chat-queue`. Processes `process-chat-message` jobs
+ * by invoking the LLM tool loop, saving the assistant reply, and publishing
+ * the final `done` or `error` event to the Redis SSE channel.
+ */
 @Processor('chat-queue')
 export class ChatConsumer extends WorkerHost {
   constructor(
@@ -14,6 +19,11 @@ export class ChatConsumer extends WorkerHost {
     super();
   }
 
+  /**
+   * Entry point for BullMQ. Delegates to `ClaudeService.streamAndProcess()`,
+   * saves the assistant message, marks the chat done, and publishes the `done`
+   * SSE event. On any error marks the chat `error` and publishes an `error` event.
+   */
   async process(job: Job): Promise<void> {
     if (job.name !== 'process-chat-message') return;
 

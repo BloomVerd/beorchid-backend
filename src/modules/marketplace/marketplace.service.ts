@@ -54,6 +54,10 @@ export class MarketplaceService {
 
   // ── Listings ────────────────────────────────────────────────────────────────
 
+  /**
+   * Creates a new listing for a farm plot. Status is set to OPEN immediately
+   * and the listing expires after 90 days.
+   */
   async createListing(
     input: CreateListingInput,
     sellerId: string,
@@ -67,6 +71,11 @@ export class MarketplaceService {
     return this.listingRepo.save(listing);
   }
 
+  /**
+   * Returns all listings matching the given filters. When `minHealthScore` is
+   * provided, a sub-query fetches the latest health record per farm and filters
+   * out farms that don't meet the threshold.
+   */
   async listListings(
     crop?: string,
     region?: string,
@@ -97,18 +106,21 @@ export class MarketplaceService {
     return this.listingRepo.find({ where, order: { createdAt: 'DESC' } });
   }
 
+  /** Fetches a single listing by ID. Throws 404 if not found. */
   async findListingById(id: string): Promise<Listing> {
     const listing = await this.listingRepo.findOne({ where: { id } });
     if (!listing) throw new NotFoundException(`Listing ${id} not found`);
     return listing;
   }
 
+  /** Returns all listings created by `sellerId`, optionally filtered by farm. */
   myListings(sellerId: string, farmId?: string): Promise<Listing[]> {
     const where: any = { sellerId };
     if (farmId) where.farmId = farmId;
     return this.listingRepo.find({ where, order: { createdAt: 'DESC' } });
   }
 
+  /** Marks a listing as WITHDRAWN. Only the listing owner may do this. */
   async withdrawListing(id: string, sellerId: string): Promise<Listing> {
     const listing = await this.findListingById(id);
     if (listing.sellerId !== sellerId)
@@ -119,6 +131,15 @@ export class MarketplaceService {
 
   // ── Offers ─────────────────────────────────────────────────────────────────
 
+  /**
+   * Places an initial offer on a listing. Sets `createdById` to the buyer so
+   * the buyer cannot subsequently counter or accept their own offer. Transitions
+   * the listing to UNDER_OFFER on the first offer received, and fires an SSE
+   * notification to the seller.
+   *
+   * @throws ForbiddenException  if the buyer is the listing's seller
+   * @throws BadRequestException if the listing is not OPEN or UNDER_OFFER
+   */
   async makeOffer(
     listingId: string,
     buyerId: string,
@@ -171,6 +192,18 @@ export class MarketplaceService {
     return offer;
   }
 
+  /**
+   * Creates a counter-offer in response to a pending offer. The original offer
+   * is marked COUNTERED and a new PENDING offer is saved with `createdById`
+   * set to the actor making the counter. Both seller and buyer may counter, but
+   * neither may counter an offer they themselves created. Notifies the other
+   * party via SSE.
+   *
+   * @throws NotFoundException   if the offer does not exist
+   * @throws BadRequestException if the offer is not PENDING
+   * @throws ForbiddenException  if the actor is unrelated to the offer, or is
+   *                             countering their own offer
+   */
   async counterOffer(
     offerId: string,
     actorId: string,
@@ -221,6 +254,21 @@ export class MarketplaceService {
     return counter;
   }
 
+  /**
+   * Accepts a pending offer. Runs inside a serialisable transaction that:
+   *  1. Marks the offer ACCEPTED and all other pending offers on the listing REJECTED.
+   *  2. Moves the listing to ACCEPTED status.
+   *  3. Debits the buyer's wallet to the ESCROW ledger account.
+   *  4. Creates a Deal in IN_ESCROW status with a reference to the escrow transaction.
+   *
+   * Both the seller and buyer are notified via SSE. Only the party that did NOT
+   * create the offer may accept it (`createdById` guard).
+   *
+   * @throws NotFoundException   if the offer or listing does not exist
+   * @throws BadRequestException if the offer is not PENDING
+   * @throws ForbiddenException  if the actor is unrelated to the offer, or is
+   *                             accepting their own offer
+   */
   async acceptOffer(offerId: string, actorId: string): Promise<Deal> {
     return this.dataSource.transaction(async (em) => {
       const offerRepo = em.getRepository(Offer);
@@ -319,6 +367,15 @@ export class MarketplaceService {
     });
   }
 
+  /**
+   * Rejects a pending offer. Either the seller or the buyer may reject, but
+   * neither may reject an offer they themselves created. The creator of the
+   * rejected offer is notified via SSE.
+   *
+   * @throws NotFoundException  if the offer does not exist
+   * @throws ForbiddenException if the actor is unrelated to the offer, or is
+   *                            rejecting their own offer
+   */
   async rejectOffer(offerId: string, actorId: string): Promise<Offer> {
     const offer = await this.offerRepo.findOne({ where: { id: offerId } });
     if (!offer) throw new NotFoundException('Offer not found');
@@ -346,6 +403,13 @@ export class MarketplaceService {
     return this.offerRepo.save(offer);
   }
 
+  /**
+   * Withdraws the buyer's own pending offer. Only the buyer who created the
+   * offer thread (`buyerId`) may withdraw, and only while the offer is PENDING.
+   *
+   * @throws NotFoundException   if the offer does not exist or belongs to another buyer
+   * @throws BadRequestException if the offer is not PENDING
+   */
   async withdrawOffer(offerId: string, buyerId: string): Promise<Offer> {
     const offer = await this.offerRepo.findOne({
       where: { id: offerId, buyerId },
@@ -357,6 +421,7 @@ export class MarketplaceService {
     return this.offerRepo.save(offer);
   }
 
+  /** Returns all offers on a listing ordered by creation date descending. */
   listingOffers(listingId: string): Promise<Offer[]> {
     return this.offerRepo.find({
       where: { listingId },
@@ -364,6 +429,7 @@ export class MarketplaceService {
     });
   }
 
+  /** Returns all offers created by the given buyer. */
   myOffers(buyerId: string): Promise<Offer[]> {
     return this.offerRepo.find({
       where: { buyerId },
@@ -371,6 +437,7 @@ export class MarketplaceService {
     });
   }
 
+  /** Returns all deals where the user is either the buyer or the seller. */
   myDeals(userId: string): Promise<Deal[]> {
     return this.dealRepo.find({
       where: [{ buyerId: userId }, { sellerId: userId }],
@@ -378,6 +445,16 @@ export class MarketplaceService {
     });
   }
 
+  /**
+   * Confirms that the seller has fulfilled the deal. Runs inside a transaction
+   * that marks the deal COMPLETED and credits the seller's wallet from the
+   * ESCROW account to USER_CASH. The seller is notified via SSE.
+   *
+   * Only the buyer of the deal may call this method.
+   *
+   * @throws NotFoundException   if the deal does not exist or does not belong to the buyer
+   * @throws BadRequestException if the deal is already COMPLETED
+   */
   async confirmDealPayment(dealId: string, buyerId: string): Promise<Deal> {
     const saved = await this.dataSource.transaction(async (em) => {
       const dealRepo = em.getRepository(Deal);

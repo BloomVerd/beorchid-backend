@@ -1,3 +1,11 @@
+/**
+ * Auth module — handles all authentication flows for the platform.
+ *
+ * Supports password login, passwordless magic-link sign-in, Google OAuth 2.0,
+ * JWT access-token issuance (24 h), refresh-token rotation (7 days), logout,
+ * and in-session password changes. Tokens are stored as SHA-256 hashes so
+ * that a database compromise does not expose usable credentials.
+ */
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';

@@ -3,6 +3,16 @@ import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import { ChatSseEvent } from './claude.tools';
 
+/**
+ * Redis pub/sub bridge for chat SSE streaming. Maintains two separate ioredis
+ * connections — one for publishing (from workers) and one for subscribing (from
+ * HTTP handlers) — because a Redis client in subscriber mode cannot issue other
+ * commands on the same connection.
+ *
+ * Each chat session uses a dedicated channel key `chat:{chatId}`. The async
+ * generator yielded by `subscribe()` terminates automatically on `done` /
+ * `error` events or when the client disconnects (`AbortSignal`).
+ */
 @Injectable()
 export class ChatPubSubService implements OnModuleInit, OnModuleDestroy {
   private publisher: Redis;
@@ -22,10 +32,16 @@ export class ChatPubSubService implements OnModuleInit, OnModuleDestroy {
     this.subscriber.disconnect();
   }
 
+  /** Serialises a `ChatSseEvent` and publishes it to the `chat:{chatId}` Redis channel. */
   async publish(chatId: string, event: ChatSseEvent): Promise<void> {
     await this.publisher.publish(`chat:${chatId}`, JSON.stringify(event));
   }
 
+  /**
+   * Subscribes to the `chat:{chatId}` Redis channel and yields raw JSON event
+   * strings until a `done` or `error` event is received or `signal` is aborted.
+   * Cleans up the Redis subscription on exit regardless of how the generator terminates.
+   */
   async *subscribe(
     chatId: string,
     signal: AbortSignal,

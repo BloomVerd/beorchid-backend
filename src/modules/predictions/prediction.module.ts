@@ -18,6 +18,15 @@ import { EmailModule } from '../email/email.module';
 import { SmsModule } from '../sms/sms.module';
 import { JwtStrategy } from 'src/common/strategies';
 
+/**
+ * Provides the crop prediction pipeline. A GraphQL mutation enqueues a
+ * `create-predictions` job (after enforcing the weekly limit); the consumer
+ * calls the external ML API, persists `Prediction` rows, and dispatches
+ * notifications. `PredictionRange` tracks per-week regeneration counts.
+ *
+ * ImageData repositories are accessed through the imported `FarmModule` to
+ * avoid re-registering farm entities.
+ */
 @Module({
   imports: [
     ConfigModule,

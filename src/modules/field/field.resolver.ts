@@ -10,11 +10,22 @@ import { RolesGuard, Roles, FieldAgentGuard } from '../roles';
 import { CurrentFarmer } from 'src/common/decorators';
 import { Farmer } from '../farmer/entities/farmer.entity';
 
+/**
+ * GraphQL resolver for the field module. All operations require a valid JWT.
+ * Observation submission and management require the `FieldAgentGuard`
+ * (`farmer.isFieldAgent === true`). Admin review and credentialing operations
+ * require the `super_admin` role.
+ */
 @Resolver()
 @UseGuards(GqlJwtAuthGuard)
 export class FieldResolver {
   constructor(private readonly fieldService: FieldService) {}
 
+  /**
+   * Submits a single field observation. HIGH-confidence observations are
+   * auto-approved and immediately published as a market price point.
+   * Requires field agent capability.
+   */
   @Mutation(() => FieldObservation)
   @UseGuards(FieldAgentGuard)
   submitFieldObservation(
@@ -24,6 +35,12 @@ export class FieldResolver {
     return this.fieldService.submit(input, user.id);
   }
 
+  /**
+   * Submits up to 50 observations in one call. Duplicate entries (matched on
+   * agentId + cropId + region + observedAt + priceType) are skipped rather than
+   * errored. Returns per-item results and aggregate counts.
+   * Requires field agent capability.
+   */
   @Mutation(() => ObservationBatchResult)
   @UseGuards(FieldAgentGuard)
   submitFieldObservationBatch(
@@ -34,6 +51,10 @@ export class FieldResolver {
     return this.fieldService.submitBatch(inputs, user.id);
   }
 
+  /**
+   * Updates a SUBMITTED observation. Only the original submitter may edit it.
+   * Requires field agent capability.
+   */
   @Mutation(() => FieldObservation)
   @UseGuards(FieldAgentGuard)
   updateFieldObservation(
@@ -44,6 +65,10 @@ export class FieldResolver {
     return this.fieldService.update(id, user.id, input);
   }
 
+  /**
+   * Deletes a SUBMITTED observation. Only the original submitter may delete it.
+   * Requires field agent capability.
+   */
   @Mutation(() => Boolean)
   @UseGuards(FieldAgentGuard)
   deleteFieldObservation(
@@ -53,12 +78,14 @@ export class FieldResolver {
     return this.fieldService.remove(id, user.id);
   }
 
+  /** Returns all observations submitted by the authenticated user. Requires field agent capability. */
   @Query(() => [FieldObservation])
   @UseGuards(FieldAgentGuard)
   myFieldObservations(@CurrentFarmer() user: Farmer): Promise<FieldObservation[]> {
     return this.fieldService.myObservations(user.id);
   }
 
+  /** Returns a single observation by ID. Open to any authenticated user. */
   @Query(() => FieldObservation, { nullable: true })
   fieldObservation(
     @Args('id', { type: () => ID }) id: string,
@@ -68,6 +95,7 @@ export class FieldResolver {
 
   // ── Admin endpoints ──────────────────────────────────────────────────────────
 
+  /** Returns all observations with optional filters. Restricted to `super_admin`. */
   @Query(() => [FieldObservation])
   @UseGuards(RolesGuard)
   @Roles('super_admin')
@@ -81,6 +109,10 @@ export class FieldResolver {
     return this.fieldService.adminListObservations({ status, cropId, region, from, to });
   }
 
+  /**
+   * Approves an observation and publishes it as a market price point. Optionally
+   * overrides the observed price before publishing. Restricted to `super_admin`.
+   */
   @Mutation(() => FieldObservation)
   @UseGuards(RolesGuard)
   @Roles('super_admin')
@@ -92,6 +124,7 @@ export class FieldResolver {
     return this.fieldService.approve(id, user.id, adjustedPrice);
   }
 
+  /** Rejects an observation with a reason note. Restricted to `super_admin`. */
   @Mutation(() => FieldObservation)
   @UseGuards(RolesGuard)
   @Roles('super_admin')
@@ -103,6 +136,10 @@ export class FieldResolver {
     return this.fieldService.reject(id, user.id, reason);
   }
 
+  /**
+   * Grants field agent capability to a user. Idempotent. Sets
+   * `farmer.isFieldAgent = true`. Restricted to `super_admin`.
+   */
   @Mutation(() => FieldAgentCapability)
   @UseGuards(RolesGuard)
   @Roles('super_admin')
@@ -113,6 +150,7 @@ export class FieldResolver {
     return this.fieldService.grantFieldAgent(userId, user.id);
   }
 
+  /** Revokes field agent capability and sets `farmer.isFieldAgent = false`. Restricted to `super_admin`. */
   @Mutation(() => Boolean)
   @UseGuards(RolesGuard)
   @Roles('super_admin')
@@ -122,6 +160,7 @@ export class FieldResolver {
     return this.fieldService.revokeFieldAgent(userId);
   }
 
+  /** Returns all active field agent capability records. Restricted to `super_admin`. */
   @Query(() => [FieldAgentCapability])
   @UseGuards(RolesGuard)
   @Roles('super_admin')

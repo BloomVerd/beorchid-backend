@@ -1,3 +1,10 @@
+/**
+ * Admin module — super-admin GraphQL API for platform governance.
+ *
+ * Provides metrics aggregation, audit log access, user role management,
+ * field-agent grants, and super-admin account seeding. All resolver
+ * operations are restricted to the `super_admin` role.
+ */
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Farmer } from '../farmer/entities/farmer.entity';

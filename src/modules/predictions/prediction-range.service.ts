@@ -4,6 +4,11 @@ import { Between, Repository } from 'typeorm';
 import { PredictionRange } from './entities/prediction-range.entity';
 import { Farm } from '../farm/entities/farm.entity';
 
+/**
+ * Handles explicit creation of `PredictionRange` records for the current ISO week.
+ * Used by the `createPredictionRange` mutation; `generateFarmPredictions` also
+ * creates ranges implicitly via `PredictionService`.
+ */
 @Injectable()
 export class PredictionRangeService {
   constructor(
@@ -11,6 +16,10 @@ export class PredictionRangeService {
     private predictionRangeRepository: Repository<PredictionRange>,
   ) {}
 
+  /**
+   * Creates a `PredictionRange` for the current ISO week (Mon–Sun).
+   * @throws `BadRequestException` if the farm is not found or a range already exists for this week.
+   */
   async createPredictionRange(
     farmerId: string,
     farmId: string,

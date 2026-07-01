@@ -10,6 +10,10 @@ import { GqlJwtAuthGuard } from 'src/common/guards';
 import { CurrentFarmer } from 'src/common/decorators';
 import { Farmer } from '../farmer/entities/farmer.entity';
 
+/**
+ * GraphQL resolver for health queries. All operations require JWT authentication.
+ * Both queries include weather forecast data fetched in parallel from Open-Meteo.
+ */
 @Resolver(() => FarmHealth)
 export class HealthResolver {
   constructor(private readonly healthService: HealthService) {}

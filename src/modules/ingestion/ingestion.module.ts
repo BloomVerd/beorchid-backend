@@ -10,6 +10,18 @@ import { IngestionController } from './ingestion.controller';
 import { IngestionConsumer } from './ingestion.consumer';
 import { MarketModule } from '../market/market.module';
 
+/**
+ * Ingestion module — admin tooling for bulk-importing market price data.
+ *
+ * Supports three intake paths:
+ *  1. REST CSV/JSON file upload (multipart, via IngestionController)
+ *  2. GraphQL single-point injection and price correction
+ *  3. Scheduled or manually triggered external feed runs
+ *
+ * All operations are restricted to `super_admin`. Depends on MarketModule to
+ * persist price points. Uses two BullMQ queues: `ingestion` for file processing
+ * jobs and `coin-price-recompute` to trigger repricing after new data lands.
+ */
 @Module({
   imports: [
     TypeOrmModule.forFeature([DataIngestionJob, ExternalFeed]),

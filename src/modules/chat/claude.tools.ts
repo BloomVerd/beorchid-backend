@@ -1,5 +1,17 @@
 import OpenAI from 'openai';
 
+/**
+ * OpenAI-format tool definitions passed to the LLM on every chat completion.
+ *
+ * Five tools are available:
+ * - `get_farm_health`  — latest health report (scores, alerts, sensor history)
+ * - `get_predictions`  — recent disease / yield predictions
+ * - `get_iot_devices`  — list of registered IoT devices and their status
+ * - `get_farm_details` — static farm metadata (name, crop type, size, location)
+ * - `trigger_iot_device` — send a command (irrigate, capture, etc.) to a device
+ *
+ * All farm-scoped tools implicitly use the `farmId` supplied to `ClaudeService.streamAndProcess()`.
+ */
 export const LLM_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: 'function',
@@ -93,6 +105,16 @@ export const LLM_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   },
 ];
 
+/**
+ * Shape of every event published to the `chat:{chatId}` Redis SSE channel.
+ *
+ * | `type`     | Carries          | Meaning                                    |
+ * |------------|------------------|--------------------------------------------|
+ * | `token`    | `delta`          | Incremental text chunk from the LLM        |
+ * | `tool_use` | `toolName`       | Model is invoking a tool (show indicator)  |
+ * | `done`     | `messageId`      | Final assistant message has been persisted |
+ * | `error`    | `message`        | Processing failed; close the SSE stream    |
+ */
 export interface ChatSseEvent {
   type: 'token' | 'tool_use' | 'done' | 'error';
   chatId: string;

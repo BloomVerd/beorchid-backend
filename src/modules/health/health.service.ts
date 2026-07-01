@@ -17,6 +17,16 @@ const SEVERITY_ORDER: Record<AlertSeverity, number> = {
   [AlertSeverity.INFO]: 1,
 };
 
+/**
+ * Read-side service for health data. Serves the GraphQL queries; does not write
+ * health records (that is the consumer's job).
+ *
+ * `listFarmsHealth()` fetches the latest snapshot per farm with a subquery to avoid
+ * loading all historical rows. Weather forecasts are appended per farm in parallel.
+ *
+ * `getFarmHealth()` returns the full detail including all sub-relations, a 7-day
+ * weather forecast, and recent predictions from the last 7 days.
+ */
 @Injectable()
 export class HealthService {
   constructor(

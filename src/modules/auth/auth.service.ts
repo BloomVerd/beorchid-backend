@@ -19,6 +19,14 @@ import { HashHelper } from 'src/common/lib';
 import { EmailProducer } from '../email/email.producer';
 import { SubscriptionService } from '../payment/subscription.service';
 
+/**
+ * Core authentication service. Implements all sign-in and token-management
+ * flows: password login, magic-link (passwordless), Google OAuth upsert,
+ * JWT + refresh-token issuance, token rotation, logout, and password changes.
+ *
+ * Tokens are never stored in plain text — only their SHA-256 digest is
+ * persisted so a database leak cannot yield usable credentials.
+ */
 @Injectable()
 export class AuthService {
   constructor(
@@ -34,6 +42,15 @@ export class AuthService {
     private subscriptionService: SubscriptionService,
   ) {}
 
+  // ── Registration ────────────────────────────────────────────────────────────
+
+  /**
+   * Creates a new farmer account, sends a welcome email, assigns the free
+   * subscription plan (best-effort — failure does not abort registration),
+   * and returns an initial token pair.
+   *
+   * @throws BadRequestException if a user with the given email already exists
+   */
   async register(input: RegisterInput): Promise<AuthPayload> {
     const existing = await this.farmerRepository.findOne({
       where: { email: input.email },
@@ -68,6 +85,14 @@ export class AuthService {
     return this.issueTokens(farmer);
   }
 
+  // ── Magic-link ──────────────────────────────────────────────────────────────
+
+  /**
+   * Generates a 32-byte random magic-link token, stores its SHA-256 hash with
+   * a 15-minute expiry, and emails the raw token to the user as a sign-in URL.
+   *
+   * @throws BadRequestException if no account exists for the given email
+   */
   async sendMagicLink(
     email: string,
     redirectBase?: string,
@@ -101,6 +126,13 @@ export class AuthService {
     return { message: 'Magic link sent to your email' };
   }
 
+  /**
+   * Validates a raw magic-link token by comparing its SHA-256 hash against the
+   * database record, ensures it has not been used or expired, marks it as used,
+   * and returns a new token pair.
+   *
+   * @throws UnauthorizedException if the token is invalid, already used, or expired
+   */
   async verifyMagicLink(rawToken: string): Promise<AuthPayload> {
     const hashedToken = this.hashToken(rawToken);
 
@@ -131,6 +163,14 @@ export class AuthService {
     return this.issueTokens(farmer);
   }
 
+  // ── Password login ──────────────────────────────────────────────────────────
+
+  /**
+   * Authenticates a user with email and password. Selects `passwordHash`
+   * explicitly (excluded by default) and uses bcrypt comparison.
+   *
+   * @throws BadRequestException if the email is not found or the password is incorrect
+   */
   async loginWithPassword(
     email: string,
     password: string,
@@ -153,6 +193,15 @@ export class AuthService {
     return this.issueTokens(farmer);
   }
 
+  // ── Token rotation ──────────────────────────────────────────────────────────
+
+  /**
+   * Rotates a refresh token: validates the hash, deletes the old record, and
+   * issues a fresh access + refresh token pair. Each refresh token is
+   * single-use — presenting it a second time results in a 401.
+   *
+   * @throws UnauthorizedException if the token is invalid or expired
+   */
   async refresh(rawRefreshToken: string): Promise<AuthPayload> {
     const hashedToken = this.hashToken(rawRefreshToken);
     const record = await this.refreshTokenRepository.findOne({
@@ -168,12 +217,22 @@ export class AuthService {
     return this.issueTokens(record.farmer);
   }
 
+  /** Invalidates a refresh token by deleting its hashed record from the database. */
   async logout(rawRefreshToken: string): Promise<MessageResponse> {
     const hashedToken = this.hashToken(rawRefreshToken);
     await this.refreshTokenRepository.delete({ token: hashedToken });
     return { message: 'Logged out successfully' };
   }
 
+  // ── Password management ─────────────────────────────────────────────────────
+
+  /**
+   * Verifies the caller's current password then replaces the hash with a new one.
+   *
+   * @throws NotFoundException   if the farmer record no longer exists
+   * @throws BadRequestException if the account uses social login (no password set),
+   *                             or if `currentPassword` does not match
+   */
   async changePassword(
     farmerId: string,
     input: ChangePasswordInput,
@@ -205,6 +264,13 @@ export class AuthService {
     return { message: 'Password updated successfully' };
   }
 
+  // ── Google OAuth ────────────────────────────────────────────────────────────
+
+  /**
+   * Upserts a farmer from a Google OAuth profile. Matches by email or `googleId`.
+   * Creates a new account (with free-plan assignment) if none exists, or links
+   * `googleId` to an existing password-based account on first Google sign-in.
+   */
   async handleGoogleLogin(googleUser: {
     email: string;
     firstName: string;
@@ -237,6 +303,12 @@ export class AuthService {
     return this.issueTokens(farmer);
   }
 
+  // ── Internal helpers ────────────────────────────────────────────────────────
+
+  /**
+   * Signs a JWT access token (24 h) and persists a new hashed refresh token
+   * (7 days). Returns both tokens alongside the farmer record.
+   */
   private async issueTokens(farmer: Farmer): Promise<AuthPayload> {
     const payload = {
       id: farmer.id,
@@ -260,6 +332,7 @@ export class AuthService {
     return { farmer, accessToken, refreshToken: rawRefreshToken };
   }
 
+  /** Returns the SHA-256 hex digest of a raw token string. */
   private hashToken(token: string): string {
     return crypto.createHash('sha256').update(token).digest('hex');
   }

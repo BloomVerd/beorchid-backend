@@ -15,6 +15,14 @@ import { JwtService } from '@nestjs/jwt';
 import { FarmService } from './farm.service';
 import { IotPubSubService } from './iot-pubsub.service';
 
+/**
+ * REST controller for IoT-specific endpoints that require raw HTTP semantics
+ * (SSE streams, binary file downloads, and webhook callbacks from AWS IoT Rules).
+ *
+ * The SSE stream and download endpoints accept a JWT via the `?token=` query
+ * parameter because browsers cannot set `Authorization` headers on native
+ * `EventSource` or `<a download>` requests.
+ */
 @Controller('api')
 export class IotController {
   constructor(
@@ -23,6 +31,11 @@ export class IotController {
     private readonly jwtService: JwtService,
   ) {}
 
+  /**
+   * Opens an SSE stream for real-time IoT tool-call status updates for a farm.
+   * Validates the JWT from `?token=` and forwards Redis pub/sub events until
+   * the client disconnects or `AbortSignal` fires.
+   */
   @Get('farm/:farmId/iot/stream')
   async streamIotDevices(
     @Param('farmId') farmId: string,
@@ -58,6 +71,11 @@ export class IotController {
     }
   }
 
+  /**
+   * Streams the IoT device credential bundle as a ZIP download.
+   * Validates the JWT from `?token=` to identify the farmer before delegating
+   * to `FarmService.downloadIotDevicePackage()`.
+   */
   @Get('farm/:farmId/iot/:deviceId/download')
   async downloadIotDevicePackage(
     @Param('farmId') farmId: string,
@@ -95,6 +113,10 @@ export class IotController {
     }
   }
 
+  /**
+   * AWS IoT Rule HTTP destination confirmation handshake. AWS sends a GET with
+   * `?confirmationToken=…`; we must echo back the token to confirm ownership.
+   */
   @Get('iot/webhook')
   @HttpCode(200)
   async confirmIotDestination(
@@ -109,6 +131,11 @@ export class IotController {
     res.status(200).send(confirmationToken);
   }
 
+  /**
+   * Receives job-status payloads forwarded by the AWS IoT Rule HTTP action.
+   * Updates the `IotToolCall` record and publishes the result to the Redis
+   * SSE channel so connected clients see the status change in real time.
+   */
   @Post('iot/webhook')
   async handleWebhook(
     @Headers('x-iot-secret') secret: string,

@@ -9,6 +9,14 @@ import {
 import { WalletService } from './wallet.service';
 // import { PaymentService } from '../payment/payment.service';
 
+/**
+ * REST controller for Paystack payment webhooks. Mounted at
+ * `POST /api/v2/webhooks/payments`. The Paystack webhook handler is currently
+ * disabled — deposit webhooks are instead handled by `PaymentController`
+ * at `POST /api/payment/webhook`, which dispatches to either
+ * `SubscriptionService.activateSubscription` or
+ * `WalletService.handleDepositWebhook` based on the transaction type.
+ */
 @Controller('api/v2/webhooks/payments')
 export class WalletController {
   constructor(

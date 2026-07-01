@@ -9,11 +9,21 @@ import { GqlJwtAuthGuard } from 'src/common/guards';
 import { CurrentFarmer } from 'src/common/decorators';
 import { Farmer } from '../farmer/entities/farmer.entity';
 
+/**
+ * GraphQL resolver for organization and membership operations. All queries and
+ * mutations require a valid JWT. Organization creation is open to any
+ * authenticated user; member management is enforced at the service level
+ * (only the org owner may add members).
+ */
 @Resolver(() => Organization)
 @UseGuards(GqlJwtAuthGuard)
 export class OrganizationResolver {
   constructor(private readonly organizationService: OrganizationService) {}
 
+  /**
+   * Creates a new organization owned by the authenticated user. The owner is
+   * automatically added as a member with the `'owner'` role.
+   */
   @Mutation(() => Organization)
   async createOrganization(
     @Args('input') input: CreateOrganizationInput,
@@ -22,6 +32,10 @@ export class OrganizationResolver {
     return this.organizationService.create(input.name, user.id);
   }
 
+  /**
+   * Adds a member to an organization. Only the organization owner may perform
+   * this action; non-owners receive a 403.
+   */
   @Mutation(() => OrganizationMember)
   async addOrgMember(
     @Args('input') input: AddOrgMemberInput,
@@ -35,6 +49,7 @@ export class OrganizationResolver {
     );
   }
 
+  /** Returns all organizations owned by the authenticated user with their members loaded. */
   @Query(() => [Organization])
   async myOrganizations(@CurrentFarmer() user: Farmer): Promise<Organization[]> {
     return this.organizationService.findByOwner(user.id);

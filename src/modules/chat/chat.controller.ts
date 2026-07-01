@@ -19,6 +19,14 @@ import { ChatProducer } from './chat.producer';
 import { ChatPubSubService } from './chat-pubsub.service';
 import { SendMessageDto, SendMessageResponseDto } from './dto/send-message.dto';
 
+/**
+ * REST controller for the chat module. Provides message sending, SSE streaming,
+ * message history retrieval, chat listing, and chat deletion.
+ *
+ * The SSE stream endpoint (`GET /:chatId/stream`) accepts a JWT as a query
+ * parameter (`?token=`) because the browser `EventSource` API cannot set
+ * custom headers. All other endpoints use `JwtAuthGuard` on the `Authorization` header.
+ */
 @Controller('v1/chat')
 export class ChatController {
   constructor(
@@ -27,6 +35,11 @@ export class ChatController {
     private readonly pubSub: ChatPubSubService,
   ) {}
 
+  /**
+   * Persists the user prompt, enqueues an LLM processing job, and returns
+   * `{ chatId }` immediately. The client should open the SSE stream using
+   * the returned `chatId` to receive token deltas.
+   */
   @Post('message')
   @UseGuards(JwtAuthGuard)
   async sendMessage(
@@ -44,6 +57,12 @@ export class ChatController {
     return { chatId };
   }
 
+  /**
+   * Opens an SSE stream for the given chat. Verifies the JWT from the `?token=`
+   * query parameter. If the LLM has already finished, immediately flushes the
+   * full response and closes; otherwise subscribes to Redis and forwards events
+   * until a `done` or `error` event is received or the client disconnects.
+   */
   @Get(':chatId/stream')
   async streamChat(
     @Param('chatId') chatId: string,
@@ -100,6 +119,7 @@ export class ChatController {
     }
   }
 
+  /** Returns all completed messages for a chat scoped to the authenticated farmer. */
   @Get(':chatId/messages')
   @UseGuards(JwtAuthGuard)
   async getMessages(@Param('chatId') chatId: string, @Req() req: any) {
@@ -107,6 +127,7 @@ export class ChatController {
     return this.chatService.getMessages(chatId, farmer.id);
   }
 
+  /** Returns a paginated list of the authenticated farmer's chat threads. */
   @Get()
   @UseGuards(JwtAuthGuard)
   async getChats(
@@ -118,6 +139,7 @@ export class ChatController {
     return this.chatService.getChats(farmer.id, page, limit);
   }
 
+  /** Deletes a chat and all its messages. Returns 204 No Content on success. */
   @Delete(':chatId')
   @HttpCode(204)
   @UseGuards(JwtAuthGuard)

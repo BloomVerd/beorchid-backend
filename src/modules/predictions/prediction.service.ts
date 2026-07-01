@@ -15,6 +15,14 @@ import { throwSubscriptionLimitError } from 'src/common/exceptions/subscription.
 import { GenerateFarmPredictionResponse } from './types/generate-farm-prediction-response';
 import { PaginatedPredictions } from './types/paginated-predictions';
 
+/**
+ * Orchestrates prediction generation requests. Enforces the per-week regeneration
+ * limit from `FarmerSettings.predictionWeeklyLimit` before enqueuing the job.
+ *
+ * Uses `PredictionRange` (one per farm per ISO week) as the regeneration counter.
+ * The range is created on first request and incremented on subsequent ones; the
+ * request is rejected when the count reaches the limit.
+ */
 @Injectable()
 export class PredictionService {
   constructor(
@@ -24,6 +32,16 @@ export class PredictionService {
     private readonly farmerSettingsService: FarmerSettingsService,
   ) {}
 
+  // ── Prediction generation ────────────────────────────────────────────────
+
+  /**
+   * Validates the farm has images, enforces the weekly regeneration limit, increments
+   * the `PredictionRange` counter, and enqueues the ML job. Returns immediately with
+   * an acknowledgement message.
+   *
+   * @throws `BadRequestException` if the farmer or farm is not found, or if the farm has no images.
+   * @throws `SubscriptionLimitException` if the weekly prediction limit has been reached.
+   */
   async generateFarmPredictions(
     email: string,
     farmId: string,
@@ -91,6 +109,14 @@ export class PredictionService {
     });
   }
 
+  // ── Queries ──────────────────────────────────────────────────────────────
+
+  /**
+   * Returns paginated predictions for a farm, optionally filtered to a specific
+   * year/month/week. Week 4 extends to end-of-month so partial last weeks are included.
+   *
+   * @throws `BadRequestException` if the farm is not found or doesn't belong to the farmer.
+   */
   async listFarmPredictions(
     farmerId: string,
     farmId: string,

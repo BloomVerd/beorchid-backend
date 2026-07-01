@@ -4,6 +4,15 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 
+/**
+ * Wraps Cloudflare R2 (via the AWS S3 SDK) to upload farm images.
+ *
+ * The client is configured with `S3_ENDPOINT` (R2 bucket URL) and `region: "auto"`
+ * to satisfy the SDK while targeting R2. `S3_BUCKET_PUBLIC` is the bucket name.
+ *
+ * Only used for direct multipart upload from the server. Pre-signed URL generation
+ * for client-side uploads lives in the upload module.
+ */
 @Injectable()
 export class S3Provider {
   private s3: S3Client;
@@ -22,6 +31,10 @@ export class S3Provider {
     this.bucket = configService.get<string>('S3_BUCKET_PUBLIC') ?? '';
   }
 
+  /**
+   * Uploads a Multer file buffer to R2 and returns the object key.
+   * @throws `RequestTimeoutException` if the S3 SDK call fails.
+   */
   async fileupload(file: Express.Multer.File): Promise<string> {
     const key = this.generateFileName(file);
     const command = new PutObjectCommand({

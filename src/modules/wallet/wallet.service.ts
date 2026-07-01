@@ -26,6 +26,26 @@ import {
 import { Farmer } from '../farmer/entities/farmer.entity';
 import { ConfigService } from '@nestjs/config';
 
+/**
+ * Core wallet and ledger service for GHS balance management.
+ *
+ * Balance model:
+ *  - `availableBalance` — funds the user can spend immediately.
+ *  - `lockedBalance` — funds reserved for pending operations (e.g. escrow).
+ *  Every balance change writes a matching `LedgerEntry` row so the full
+ *  transaction history is auditable.
+ *
+ * All mutating methods accept an optional `em` (EntityManager) so they can
+ * participate in an outer transaction. When called without `em`, they open
+ * their own transaction internally.
+ *
+ * Deposit flow:
+ *  1. `initiateDeposit` — creates a Paystack transaction and a `PaymentIntentV2`
+ *     row (status PENDING). Returns the Paystack checkout URL.
+ *  2. `handleDepositWebhook` — called by the webhook controller on
+ *     `charge.success`; credits the wallet and marks the intent COMPLETED.
+ *     Idempotent: second calls with the same `providerRef` are no-ops.
+ */
 @Injectable()
 export class WalletService {
   private readonly secretKey: string;
@@ -48,6 +68,10 @@ export class WalletService {
       this.configService.get<string>('PAYSTACK_SECRET_KEY') ?? '';
   }
 
+  /**
+   * Returns the wallet for `ownerId`, creating it (currency: GHS) if it does
+   * not yet exist.
+   */
   async getOrCreateWallet(
     ownerId: string,
     ownerType = WalletOwnerType.USER,
@@ -63,6 +87,7 @@ export class WalletService {
     return wallet;
   }
 
+  /** Returns ledger entries for a wallet with optional date-range and account filters. */
   async getLedger(
     walletId: string,
     from?: Date,
@@ -74,6 +99,14 @@ export class WalletService {
     return this.ledgerRepo.find({ where, order: { createdAt: 'DESC' } });
   }
 
+  /**
+   * Debits `amount` from `availableBalance` and writes a DEBIT ledger entry.
+   * Uses a `pessimistic_write` lock to prevent concurrent over-spend.
+   * Wraps itself in a transaction if no `em` is provided.
+   *
+   * @throws NotFoundException   if the wallet does not exist
+   * @throws BadRequestException if the balance is insufficient
+   */
   async debit(
     walletId: string,
     amount: number,
@@ -110,6 +143,12 @@ export class WalletService {
     );
   }
 
+  /**
+   * Credits `amount` to `availableBalance` and writes a CREDIT ledger entry.
+   * Wraps itself in a transaction if no `em` is provided.
+   *
+   * @throws NotFoundException if the wallet does not exist
+   */
   async credit(
     walletId: string,
     amount: number,
@@ -144,6 +183,12 @@ export class WalletService {
     );
   }
 
+  /**
+   * Moves `amount` from `availableBalance` into `lockedBalance` (e.g. escrow).
+   *
+   * @throws NotFoundException   if the wallet does not exist
+   * @throws BadRequestException if the available balance is insufficient
+   */
   async lock(walletId: string, amount: number, em?: any): Promise<void> {
     const repo = em ? em.getRepository(Wallet) : this.walletRepo;
     const wallet = await repo.findOne({
@@ -158,6 +203,11 @@ export class WalletService {
     await repo.save(wallet);
   }
 
+  /**
+   * Moves `amount` from `lockedBalance` back to `availableBalance`.
+   *
+   * @throws NotFoundException if the wallet does not exist
+   */
   async unlock(walletId: string, amount: number, em?: any): Promise<void> {
     const repo = em ? em.getRepository(Wallet) : this.walletRepo;
     const wallet = await repo.findOne({
@@ -170,6 +220,12 @@ export class WalletService {
     await repo.save(wallet);
   }
 
+  /**
+   * Calls the Paystack `/transaction/initialize` API and returns the
+   * checkout URL and access code.
+   *
+   * @throws InternalServerErrorException if the Paystack API returns an error
+   */
   async initializeTransaction(
     email: string,
     amount: number,
@@ -208,6 +264,12 @@ export class WalletService {
     };
   }
 
+  /**
+   * Initiates a wallet deposit via Paystack. Idempotent on `idempotencyKey` —
+   * returns the existing intent and checkout URL if one already exists.
+   *
+   * @throws NotFoundException if the user's farmer record is not found
+   */
   async initiateDeposit(
     userId: string,
     amountPesewas: number,
@@ -246,6 +308,11 @@ export class WalletService {
     return { intent, checkoutUrl: authorizationUrl };
   }
 
+  /**
+   * Handles a Paystack `charge.success` webhook for a deposit. Credits the
+   * wallet and marks the `PaymentIntentV2` as COMPLETED. Idempotent — silently
+   * returns if the intent is already COMPLETED or not found.
+   */
   async handleDepositWebhook(providerRef: string): Promise<void> {
     const intent = await this.intentRepo.findOne({ where: { providerRef } });
     if (!intent || intent.status === PaymentIntentStatus.COMPLETED) return; // idempotent

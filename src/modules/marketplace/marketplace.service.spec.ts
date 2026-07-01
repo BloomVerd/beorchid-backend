@@ -176,7 +176,7 @@ describe('MarketplaceService', () => {
       expect(listingRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({ status: ListingStatus.UNDER_OFFER }),
       );
-      expect(notificationsProducer.notify).toHaveBeenCalledWith('seller-1', expect.any(Object));
+      expect(notificationsProducer.notify).toHaveBeenCalledWith('seller-1', expect.any(Object), true);
     });
 
     it('throws BadRequestException on a WITHDRAWN listing', async () => {
@@ -318,7 +318,7 @@ describe('MarketplaceService', () => {
 
       await service.counterOffer('offer-1', 'seller-1', 150000);
 
-      expect(notificationsProducer.notify).toHaveBeenCalledWith('buyer-1', expect.any(Object));
+      expect(notificationsProducer.notify).toHaveBeenCalledWith('buyer-1', expect.any(Object), true);
     });
 
     it('notifies the seller when the buyer counters', async () => {
@@ -330,7 +330,7 @@ describe('MarketplaceService', () => {
 
       await service.counterOffer('offer-1', 'buyer-1', 150000);
 
-      expect(notificationsProducer.notify).toHaveBeenCalledWith('seller-1', expect.any(Object));
+      expect(notificationsProducer.notify).toHaveBeenCalledWith('seller-1', expect.any(Object), true);
     });
   });
 
@@ -346,7 +346,7 @@ describe('MarketplaceService', () => {
 
       const result = await service.rejectOffer('offer-1', 'seller-1');
       expect(result.status).toBe(OfferStatus.REJECTED);
-      expect(notificationsProducer.notify).toHaveBeenCalledWith('buyer-1', expect.any(Object));
+      expect(notificationsProducer.notify).toHaveBeenCalledWith('buyer-1', expect.any(Object), true);
     });
   });
 

@@ -57,6 +57,14 @@ interface FarmDataJson {
   };
 }
 
+/**
+ * BullMQ worker for the `farm-data-queue`. Processes `generate-farm-data` jobs
+ * by gathering farm context (IoT telemetry from DynamoDB, health scores, yield
+ * data), calling the LLM with a structured prompt, parsing the JSON response,
+ * and caching the result via `FarmDataService.cacheResult()`.
+ *
+ * On any error the pending lock is cleared so the next query can retry.
+ */
 @Processor('farm-data-queue')
 export class FarmDataConsumer extends WorkerHost {
   private readonly llm: OpenAI;
@@ -81,6 +89,7 @@ export class FarmDataConsumer extends WorkerHost {
     this.dynamodb = createDynamoDBClient(this.configService);
   }
 
+  /** Entry point for BullMQ. Orchestrates data fetch, LLM call, and cache write. */
   async process(job: Job): Promise<void> {
     if (job.name !== 'generate-farm-data') return;
 
@@ -152,6 +161,9 @@ export class FarmDataConsumer extends WorkerHost {
     }
   }
 
+  // ── Data helpers ─────────────────────────────────────────────────────────
+
+  /** Queries the DynamoDB `farm_telemetry` table for the last `lookbackSeconds` of sensor readings. */
   private async queryTelemetry(
     farmId: string,
     lookbackSeconds: number,
@@ -172,6 +184,7 @@ export class FarmDataConsumer extends WorkerHost {
     return (result.Items ?? []) as TelemetryItem[];
   }
 
+  /** Assembles a plain-text context string from all data sources for the LLM prompt. */
   private buildContext(
     farm: Farm | null,
     health: FarmHealth | null,
@@ -241,6 +254,9 @@ export class FarmDataConsumer extends WorkerHost {
     return parts.join('\n');
   }
 
+  // ── Prompt / parsing ─────────────────────────────────────────────────────
+
+  /** Returns the system prompt that instructs the LLM to output structured dashboard JSON. */
   private buildSystemPrompt(): string {
     return `You are a farm dashboard data analyzer. Given raw farm telemetry data, generate a structured JSON dashboard object.
 
@@ -272,6 +288,7 @@ Rules:
 - Keep all strings concise (suitable for a mobile dashboard card)`;
   }
 
+  /** Strips markdown fences and extracts the first `{…}` JSON object from the LLM response. */
   private extractJson(text: string): string {
     const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (fenceMatch) return fenceMatch[1].trim();
@@ -283,6 +300,9 @@ Rules:
     return text.trim();
   }
 
+  // ── Section mappers ──────────────────────────────────────────────────────
+
+  /** Maps the raw LLM sensor object to the typed `SensorSection`. */
   private mapSensorSection(raw: FarmDataJson['sensors']): SensorSection {
     const readings: SensorReading[] = (raw!.readings ?? []).map((r) => ({
       moisture: r.moisture,
@@ -295,6 +315,7 @@ Rules:
     return { readings, summary: raw!.summary };
   }
 
+  /** Maps the raw LLM irrigation object to the typed `IrrigationSection`. */
   private mapIrrigationSection(
     raw: FarmDataJson['irrigation'],
   ): IrrigationSection {
@@ -307,6 +328,7 @@ Rules:
     };
   }
 
+  /** Maps the raw LLM yield object to the typed `YieldSection`. */
   private mapYieldSection(raw: FarmDataJson['yield']): YieldSection {
     return {
       tons_per_ha: raw!.tons_per_ha,

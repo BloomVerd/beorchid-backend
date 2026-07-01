@@ -1,6 +1,15 @@
 import { Scalar, CustomScalar } from '@nestjs/graphql';
 import { Kind, ValueNode } from 'graphql';
 
+/**
+ * Custom GraphQL `JSON` scalar that passes arbitrary JSON values through
+ * unchanged in serialization and parse paths. Inline object/array literals in
+ * GraphQL queries are parsed from their AST kinds; string literals are
+ * JSON-parsed if possible, otherwise returned as-is.
+ *
+ * Used for the `parameters` field on `IotToolCall` and similar open-ended
+ * payload fields where the schema would otherwise require a rigid type.
+ */
 @Scalar('JSON', () => Object)
 export class JsonScalar implements CustomScalar<unknown, unknown> {
   description = 'Arbitrary JSON scalar type';

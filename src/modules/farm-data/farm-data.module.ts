@@ -12,6 +12,12 @@ import { FarmDataService } from './farm-data.service';
 import { FarmDataProducer } from './farm-data.producer';
 import { FarmDataConsumer } from './farm-data.consumer';
 
+/**
+ * Provides the on-demand farm dashboard data pipeline. A GraphQL query triggers
+ * Redis-cached result lookup; on a miss, a `generate-farm-data` job is enqueued
+ * and the caller receives `status: PENDING`. The worker (FarmDataConsumer) fetches
+ * telemetry, health, and yield data, calls the LLM, and caches the result.
+ */
 @Module({
   imports: [
     ConfigModule,

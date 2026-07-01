@@ -23,6 +23,13 @@ import { EmailModule } from '../email/email.module';
 import { SmsModule } from '../sms/sms.module';
 import { JwtStrategy } from 'src/common/strategies';
 
+/**
+ * Provides the farm health computation pipeline. `HealthScheduler` fires on a
+ * configurable cron schedule, determines which farms need a fresh health snapshot
+ * (based on `FarmerSettings.healthReportIntervalSeconds`), and enqueues batch jobs
+ * for `HealthConsumer`. The consumer calls the LLM (with an IoT tool loop), parses
+ * the structured JSON, persists all sub-entities, and dispatches notifications.
+ */
 @Module({
   imports: [
     ConfigModule,

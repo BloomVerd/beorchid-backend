@@ -8,6 +8,13 @@ import { FieldResolver } from './field.resolver';
 import { MarketModule } from '../market/market.module';
 import { Farmer } from '../farmer/entities/farmer.entity';
 
+/**
+ * Field module — manages field agent credentialing and crop price observations
+ * submitted from the ground. Approved observations are published as market price
+ * points and trigger coin price recomputation via the `coin-price-recompute` queue.
+ *
+ * Depends on MarketModule to create price points on approval.
+ */
 @Module({
   imports: [
     TypeOrmModule.forFeature([FieldObservation, FieldAgentCapability, Farmer]),

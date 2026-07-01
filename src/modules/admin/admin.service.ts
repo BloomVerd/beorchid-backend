@@ -10,6 +10,11 @@ import { CoinTransaction, CoinSide } from '../coin/entities/coin-transaction.ent
 import { AuditLog } from '../audit/entities/audit-log.entity';
 import { AdminMetrics } from './types/admin-metrics.type';
 
+/**
+ * Provides data-access and business logic for the super-admin GraphQL API.
+ * All methods query across the full platform without scoping by farmer —
+ * callers are responsible for ensuring only `super_admin` roles reach these methods.
+ */
 @Injectable()
 export class AdminService {
   constructor(
@@ -22,18 +27,34 @@ export class AdminService {
     @InjectRepository(AuditLog) private readonly auditRepo: Repository<AuditLog>,
   ) {}
 
+  // ── Users ───────────────────────────────────────────────────────────────────
+
+  /** Returns all registered users ordered by creation date descending. */
   listUsers(): Promise<Farmer[]> {
     return this.farmerRepo.find({ order: { createdAt: 'DESC' } });
   }
 
+  // ── Deals / Offers ──────────────────────────────────────────────────────────
+
+  /** Returns all deals across the platform ordered by creation date descending. */
   listDeals(): Promise<Deal[]> {
     return this.dealRepo.find({ order: { createdAt: 'DESC' } });
   }
 
+  /** Returns all offers across the platform ordered by creation date descending. */
   listOffers(): Promise<Offer[]> {
     return this.offerRepo.find({ order: { createdAt: 'DESC' } });
   }
 
+  // ── Metrics ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Computes aggregate platform KPIs in a single parallel query batch and
+   * calculates week-over-week percentage deltas for each metric.
+   *
+   * Delta fields are `null` when the prior-week baseline is zero (to avoid
+   * division-by-zero producing misleading +Infinity values).
+   */
   async getMetrics(): Promise<AdminMetrics> {
     const now = new Date();
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -97,6 +118,12 @@ export class AdminService {
     };
   }
 
+  // ── Audit log ───────────────────────────────────────────────────────────────
+
+  /**
+   * Returns up to 200 recent audit log entries, optionally filtered by
+   * entity type and a date range. Results are ordered newest-first.
+   */
   getAuditLog(entity?: string, from?: Date, to?: Date): Promise<AuditLog[]> {
     const where: any = {};
     if (entity) where.entity = entity;
@@ -104,21 +131,27 @@ export class AdminService {
     return this.auditRepo.find({ where, order: { createdAt: 'DESC' }, take: 200 });
   }
 
+  // ── User management ─────────────────────────────────────────────────────────
+
+  /** Replaces the role array on the given user and returns the updated record. */
   async updateUserRoles(userId: string, roles: string[]): Promise<Farmer> {
     await this.farmerRepo.update(userId, { roles });
     return this.farmerRepo.findOne({ where: { id: userId } }) as Promise<Farmer>;
   }
 
+  /** Deactivates a user account by setting `isActive = false`. */
   async suspendUser(userId: string): Promise<Farmer> {
     await this.farmerRepo.update(userId, { isActive: false } as any);
     return this.farmerRepo.findOne({ where: { id: userId } }) as Promise<Farmer>;
   }
 
+  /** Grants the field-agent flag to a user (`isFieldAgent = true`). */
   async grantFieldAgent(userId: string): Promise<Farmer> {
     await this.farmerRepo.update(userId, { isFieldAgent: true });
     return this.farmerRepo.findOne({ where: { id: userId } }) as Promise<Farmer>;
   }
 
+  /** Revokes the field-agent flag from a user (`isFieldAgent = false`). */
   async revokeFieldAgent(userId: string): Promise<Farmer> {
     await this.farmerRepo.update(userId, { isFieldAgent: false });
     return this.farmerRepo.findOne({ where: { id: userId } }) as Promise<Farmer>;

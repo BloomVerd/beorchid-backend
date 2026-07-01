@@ -1,3 +1,8 @@
+/**
+ * Immutable audit trail record. Rows are append-only and must never be
+ * mutated or deleted — the table is the authoritative history of
+ * state-changing actions performed by users on the platform.
+ */
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
 import { Field, ID, ObjectType } from '@nestjs/graphql';
 

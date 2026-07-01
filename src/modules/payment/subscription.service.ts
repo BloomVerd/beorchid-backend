@@ -33,6 +33,26 @@ const PLAN_HIERARCHY: Record<string, number> = {
   [PlanName.PREMIUM]: 2,
 };
 
+/**
+ * Service for the full subscription lifecycle: free-plan assignment, paid
+ * plan initiation with proration, webhook-triggered activation, and
+ * multi-channel activation notifications.
+ *
+ * Subscription flow:
+ *  1. On farmer registration, `assignFreePlan` creates a FREE subscription
+ *     and syncs `FarmerSettings` to free-tier limits.
+ *  2. To upgrade, the client calls `initiatePayment` → a `PaymentTransaction`
+ *     row is created; the Paystack checkout URL is returned.
+ *     - If the farmer already has a paid subscription, proration credit is
+ *       calculated from the remaining period. When credit covers the full new
+ *       plan cost, `activateImmediately` is called without charging.
+ *  3. On `charge.success` webhook, `activateSubscription` verifies the
+ *     transaction with Paystack, expires the old subscription, creates a new
+ *     ACTIVE one, syncs settings, and dispatches in-app/email/SMS notifications.
+ *
+ * `getActiveSubscription` auto-assigns the FREE plan for legacy accounts that
+ * pre-date the subscription system.
+ */
 @Injectable()
 export class SubscriptionService {
   constructor(
@@ -48,6 +68,12 @@ export class SubscriptionService {
     private readonly smsService: SmsService,
   ) {}
 
+  /**
+   * Creates an ACTIVE FREE subscription for the farmer and syncs
+   * `FarmerSettings` to free-tier limits.
+   *
+   * @throws NotFoundException if the FREE plan is not seeded in the database
+   */
   async assignFreePlan(farmerId: string): Promise<FarmerSubscription> {
     const freePlan = await this.planService.findByName(PlanName.FREE);
     if (!freePlan) throw new NotFoundException('Free plan not found');
@@ -63,6 +89,10 @@ export class SubscriptionService {
     return saved;
   }
 
+  /**
+   * Returns the farmer's current ACTIVE subscription. For legacy accounts
+   * with no subscription row, automatically assigns the FREE plan.
+   */
   async getActiveSubscription(farmerId: string): Promise<FarmerSubscription> {
     const subscription = await this.subscriptionRepo.findOne({
       where: { farmer: { id: farmerId }, status: SubscriptionStatus.ACTIVE },
@@ -76,6 +106,16 @@ export class SubscriptionService {
     return this.assignFreePlan(farmerId);
   }
 
+  /**
+   * Initiates a Paystack payment for a subscription upgrade or switch.
+   * Calculates proration credit from the remaining period of an existing paid
+   * subscription. If the credit covers the full new plan cost, activates
+   * immediately without charging (returns empty `authorizationUrl` and
+   * `reference`).
+   *
+   * @throws NotFoundException   if the plan is not found or inactive
+   * @throws BadRequestException if the target plan is FREE (free plan cannot be purchased)
+   */
   async initiatePayment(
     farmerId: string,
     farmerEmail: string,
@@ -158,6 +198,18 @@ export class SubscriptionService {
     return { authorizationUrl, reference };
   }
 
+  /**
+   * Activates a subscription after a successful Paystack `charge.success`
+   * webhook. Idempotent — returns early if the transaction is already SUCCESS.
+   * On success:
+   *  1. Verifies the transaction with Paystack.
+   *  2. Expires the existing ACTIVE subscription.
+   *  3. Creates a new ACTIVE subscription for the plan period.
+   *  4. Syncs `FarmerSettings` to the new plan's limits.
+   *  5. Dispatches in-app, email, and SMS activation notifications per settings.
+   *
+   * @throws NotFoundException if the transaction or plan is not found
+   */
   async activateSubscription(reference: string): Promise<void> {
     const transaction = await this.transactionRepo.findOne({
       where: { paystackReference: reference },
@@ -210,10 +262,12 @@ export class SubscriptionService {
     await this.dispatchActivationNotification(transaction.farmer, plan);
   }
 
+  /** Returns the numeric hierarchy position of a plan name (FREE=0, POPULAR=1, PREMIUM=2). */
   getPlanHierarchy(planName: string): number {
     return PLAN_HIERARCHY[planName] ?? 0;
   }
 
+  /** Syncs `FarmerSettings` limits and notification flags to the given plan's configuration. */
   private async syncSettings(
     farmerId: string,
     plan: SubscriptionPlan,
@@ -230,6 +284,7 @@ export class SubscriptionService {
     });
   }
 
+  /** Dispatches in-app, email, and SMS activation notifications according to the farmer's settings. */
   private async dispatchActivationNotification(
     farmer: Farmer,
     plan: SubscriptionPlan,
@@ -267,6 +322,7 @@ export class SubscriptionService {
     }
   }
 
+  /** Immediately switches the farmer's plan in-place (no charge) when proration credit covers the cost. */
   private async activateImmediately(
     farmerId: string,
     currentSub: FarmerSubscription,

@@ -37,6 +37,20 @@ import { EmailProducer } from '../email/email.producer';
 import { SmsService } from '../sms/sms.service';
 import { FarmerSettingsService } from '../farmer/farmer-settings.service';
 
+/**
+ * Core service for the farm module. Owns the full lifecycle of farms,
+ * farm images, and IoT devices.
+ *
+ * **Farm setup flow**: PENDING → IN_PROGRESS (on first coordinate / photo / soil
+ * update) → COMPLETE (explicit `completeSetup()` call).
+ *
+ * **IoT device flow**: AWS IoT Thing + X.509 certificate are provisioned on
+ * `registerIotDevice()`. The certificate starts inactive; `activateIotDevice()`
+ * enables it. Commands are sent as AWS IoT Jobs and status updates arrive via
+ * the IoT Rule webhook (`handleIotWebhook()`).
+ *
+ * Subscription limits are enforced before farm creation via `SubscriptionService`.
+ */
 @Injectable()
 export class FarmService {
   constructor(
@@ -54,6 +68,9 @@ export class FarmService {
     private readonly farmerSettingsService: FarmerSettingsService,
   ) {}
 
+  // ── AWS client builders ──────────────────────────────────────────────────
+
+  /** Builds an AWS IoT control-plane client. Returns `null` when env vars are absent. */
   private buildIotClient(): AWS.Iot | null {
     const region = this.configService.get<string>('IOT_REGION');
     const accessKeyId = this.configService.get<string>('IOT_ACCESS_KEY_ID');
@@ -64,6 +81,7 @@ export class FarmService {
     return new AWS.Iot({ region, accessKeyId, secretAccessKey });
   }
 
+  /** Builds an AWS IoT data-plane client (publish/subscribe). Returns `null` when env vars are absent. */
   private buildIotDataClient(): AWS.IotData | null {
     const endpoint = this.configService.get<string>('IOT_DATA_ENDPOINT');
     const region = this.configService.get<string>('IOT_REGION');
@@ -75,6 +93,7 @@ export class FarmService {
     return new AWS.IotData({ endpoint, region, accessKeyId, secretAccessKey });
   }
 
+  /** Builds an AWS IAM client used to provision the IoT rule execution role. Returns `null` when env vars are absent. */
   private buildIamClient(): AWS.IAM | null {
     const region = this.configService.get<string>('IOT_REGION');
     const accessKeyId = this.configService.get<string>('IOT_ACCESS_KEY_ID');
@@ -85,6 +104,7 @@ export class FarmService {
     return new AWS.IAM({ region, accessKeyId, secretAccessKey });
   }
 
+  /** Builds an AWS CloudWatch Logs client for IoT rule log groups. Returns `null` when env vars are absent. */
   private buildCloudWatchLogsClient(): AWS.CloudWatchLogs | null {
     const region = this.configService.get<string>('IOT_REGION');
     const accessKeyId = this.configService.get<string>('IOT_ACCESS_KEY_ID');
@@ -95,6 +115,9 @@ export class FarmService {
     return new AWS.CloudWatchLogs({ region, accessKeyId, secretAccessKey });
   }
 
+  // ── IoT infrastructure helpers ───────────────────────────────────────────
+
+  /** Creates the CloudWatch log groups used by the IoT Rule if they don't exist. */
   private async ensureLogGroups(): Promise<void> {
     const cwClient = this.buildCloudWatchLogsClient();
     if (!cwClient) return;
@@ -115,6 +138,11 @@ export class FarmService {
     }
   }
 
+  /**
+   * Ensures the `BeorchidIotRuleRole` IAM role exists with CloudWatch Logs permissions.
+   * Creates it (with inline policy) if absent, then ensures the log groups exist.
+   * Returns the role ARN, or `null` if IAM credentials are unavailable.
+   */
   private async ensureIotRuleRole(): Promise<string | null> {
     const iamClient = this.buildIamClient();
     if (!iamClient) return null;
@@ -186,6 +214,15 @@ export class FarmService {
     }
   }
 
+  // ── Farm CRUD ────────────────────────────────────────────────────────────
+
+  /**
+   * Creates a new farm for the farmer. Enforces the subscription plan's `maxFarms`
+   * limit inside a transaction before inserting the `Farm` row.
+   *
+   * @throws `BadRequestException` if the farmer is not found.
+   * @throws `SubscriptionLimitException` if the farmer has reached their plan's farm cap.
+   */
   async addFarm(farmerId: string, input: CreateFarmInput): Promise<Farm> {
     const subscription =
       await this.subscriptionService.getActiveSubscription(farmerId);
@@ -218,6 +255,7 @@ export class FarmService {
     });
   }
 
+  /** Returns a paginated list of farms owned by the farmer, newest first. */
   async listFarms(
     farmerId: string,
     page: number,
@@ -233,6 +271,10 @@ export class FarmService {
     return { data, total, page, lastPage: Math.ceil(total / limit) };
   }
 
+  /**
+   * Returns a single farm with coordinates, images, and IoT devices loaded.
+   * @throws `BadRequestException` if the farm is not found or doesn't belong to the farmer.
+   */
   async getFarm(farmerId: string, farmId: string): Promise<Farm> {
     const farm = await this.farmRepository.findOne({
       where: { id: farmId, farmer: { id: farmerId } },
@@ -242,6 +284,12 @@ export class FarmService {
     return farm;
   }
 
+  // ── Farm setup steps ─────────────────────────────────────────────────────
+
+  /**
+   * Replaces all coordinates for a farm, recomputes the centre-point lat/lon,
+   * and transitions setup status from PENDING → IN_PROGRESS on first call.
+   */
   async updateFarmCoordinates(
     farmerId: string,
     farmId: string,
@@ -279,6 +327,7 @@ export class FarmService {
     });
   }
 
+  /** Saves the setup photo URL and optional GPS coordinates, advancing setup status to IN_PROGRESS. */
   async updateFarmPhoto(
     farmerId: string,
     farmId: string,
@@ -302,6 +351,7 @@ export class FarmService {
     });
   }
 
+  /** Updates soil type, crop density, and linked IoT device IDs, advancing setup status to IN_PROGRESS. */
   async updateFarmSoilData(
     farmerId: string,
     farmId: string,
@@ -327,6 +377,10 @@ export class FarmService {
     });
   }
 
+  /**
+   * Marks the farm `COMPLETE` and dispatches in-app, email, and SMS notifications
+   * according to the farmer's notification preferences.
+   */
   async completeSetup(farmerId: string, farmId: string): Promise<Farm> {
     const farm = await this.farmRepository.manager.transaction(async (em) => {
       const f = await em.findOne(Farm, {
@@ -343,6 +397,7 @@ export class FarmService {
     return farm;
   }
 
+  /** Sends in-app / email / SMS notifications after farm setup completes, respecting farmer settings. */
   private async dispatchSetupNotification(farm: Farm): Promise<void> {
     if (!farm.farmer) return;
 
@@ -377,6 +432,9 @@ export class FarmService {
     }
   }
 
+  // ── Farm data helpers ────────────────────────────────────────────────────
+
+  /** Internal helper used by the ingestion pipeline to replace coordinate rows without the usual auth checks. */
   async updateFarmCoordinateData(
     farmerId: string,
     farmId: string,
@@ -473,6 +531,14 @@ export class FarmService {
     });
   }
 
+  // ── IoT device management ────────────────────────────────────────────────
+
+  /**
+   * Registers a new IoT device: creates an AWS IoT Thing, generates an X.509
+   * key-pair + certificate (inactive), attaches a scoped IoT policy, and
+   * persists the device record. If AWS credentials are absent the device is
+   * created without IoT provisioning (useful for local dev).
+   */
   async registerIotDevice(
     farmerId: string,
     farmId: string,
@@ -572,6 +638,11 @@ export class FarmService {
     });
   }
 
+  /**
+   * Deregisters an IoT device: detaches its principal, revokes and deletes the
+   * certificate, deletes the Thing from AWS IoT, and removes the database record.
+   * Each AWS call is wrapped in a try/catch so partial deletions don't block cleanup.
+   */
   async deleteIotDevice(
     farmerId: string,
     farmId: string,
@@ -629,6 +700,7 @@ export class FarmService {
     });
   }
 
+  /** Activates the IoT certificate in AWS and flips `is_active` to `true`. */
   async activateIotDevice(
     farmerId: string,
     farmId: string,
@@ -655,6 +727,11 @@ export class FarmService {
     });
   }
 
+  /**
+   * Erases the certificate PEM, private key, and public key from the database
+   * after the farmer has downloaded the credential bundle. Once cleared, the
+   * credentials cannot be recovered (a new device must be registered).
+   */
   async clearIotDeviceCert(
     farmerId: string,
     farmId: string,
@@ -674,6 +751,13 @@ export class FarmService {
     });
   }
 
+  /**
+   * Builds a ZIP bundle containing the device's X.509 certificate, private/public
+   * keys, IAM policy JSON, a `start.sh` bootstrap script, and a pre-configured
+   * `index.ts` MQTT5 client with the farm and device IDs baked in.
+   *
+   * @returns The ZIP buffer and suggested filename for the HTTP response.
+   */
   async downloadIotDevicePackage(
     farmerId: string,
     farmId: string,
@@ -752,6 +836,9 @@ export class FarmService {
     return { buffer, filename: zipFilename };
   }
 
+  // ── Device package builders ──────────────────────────────────────────────
+
+  /** Generates the `start.sh` bootstrap script embedded in the device credential ZIP. */
   private buildStartSh(farmId: string, deviceId: string): string {
     return `#!/usr/bin/env bash
 # stop script on error
@@ -785,6 +872,7 @@ node aws-iot-device-sdk-js-v2/samples/node/mqtt/mqtt5_x509/dist/index.js --endpo
 `;
   }
 
+  /** Generates the `index.ts` MQTT5 client source embedded in the device credential ZIP. */
   private buildIndexTs(
     farmId: string,
     deviceId: string,
@@ -1256,6 +1344,16 @@ runSample()
 `;
   }
 
+  // ── IoT device commands ──────────────────────────────────────────────────
+
+  /**
+   * Sends a command to an active IoT device by creating an AWS IoT Job.
+   * Persists an `IotToolCall` record first so status can be tracked via webhook.
+   *
+   * `farmerId` may be `null` when called from the AI tool loop (the LLM acts on behalf of the farmer).
+   *
+   * @throws `BadRequestException` if the device is not found or is inactive.
+   */
   async triggerIotDevice(
     farmerId: string | null,
     farmId: string,
@@ -1313,6 +1411,7 @@ runSample()
     return saved;
   }
 
+  /** Returns IoT tool calls from the last 24 hours for a farm, newest first, paginated. */
   async listIotToolCalls(
     farmerId: string,
     farmId: string,
@@ -1337,6 +1436,17 @@ runSample()
     return { data, total, page, lastPage: Math.ceil(total / limit) };
   }
 
+  // ── IoT Rule webhook ─────────────────────────────────────────────────────
+
+  /**
+   * Receives job-status updates forwarded by the AWS IoT Rule HTTP action.
+   * Validates the shared secret from the `x-iot-secret` header, updates the
+   * `IotToolCall` status (mapping `SUCCEEDED`/`COMPLETED` → `COMPLETED`), and
+   * returns the tool call with the `farmId` appended for pub/sub routing.
+   *
+   * @throws `UnauthorizedException` if the secret header does not match.
+   * @throws `BadRequestException` if the referenced tool call is not found.
+   */
   async handleIotWebhook(
     body: {
       tool_call_id: string;
@@ -1369,6 +1479,7 @@ runSample()
     return Object.assign(toolCall, { farmId: toolCall.iot_device.farm.id });
   }
 
+  /** Confirms an AWS IoT Rule HTTP destination using the token from the GET handshake. */
   async confirmIotDestination(confirmationToken: string): Promise<void> {
     const iotClient = this.buildIotClient();
     if (!iotClient) return;
@@ -1378,6 +1489,11 @@ runSample()
     console.log('confirmIotDestination:', results);
   }
 
+  /**
+   * Creates (or recreates) the `BeorchidIotJobUpdates` IoT Rule that forwards
+   * job-status MQTT messages (`farms/+/+/jobs/status`) to the webhook endpoint.
+   * Also provisions the IAM role and CloudWatch log groups if they don't exist.
+   */
   async setupIotRule(): Promise<void> {
     const iotClient = this.buildIotClient();
     if (!iotClient) return;
@@ -1447,6 +1563,12 @@ runSample()
     console.log('IoT rule created:', ruleName);
   }
 
+  // ── Farm images ──────────────────────────────────────────────────────────
+
+  /**
+   * Deletes a single farm image by ID.
+   * @throws `BadRequestException` if the farm or image is not found.
+   */
   async deleteFarmImage(
     farmerId: string,
     farmId: string,
@@ -1466,6 +1588,10 @@ runSample()
     return true;
   }
 
+  /**
+   * Returns paginated farm images, optionally filtered to a specific year/month/week.
+   * Week 4 always extends to the end of the month so the last partial week is included.
+   */
   async listFarmImages(
     farmerId: string,
     farmId: string,

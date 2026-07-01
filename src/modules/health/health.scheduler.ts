@@ -9,6 +9,15 @@ import { HealthProducer } from './health.producer';
 
 const BATCH_SIZE = 50;
 
+/**
+ * Cron-based scheduler that determines which farms need a fresh health computation
+ * and enqueues them in batches of up to 50.
+ *
+ * The cron schedule defaults to `0 */2 * * * *` (every 2 minutes) but can be
+ * overridden via `HEALTH_CRON_SCHEDULE`. Actual per-farm frequency is governed by
+ * `FarmerSettings.healthReportIntervalSeconds` — a farm is skipped if its last
+ * computation is still within the interval.
+ */
 @Injectable()
 export class HealthScheduler {
   private readonly logger = new Logger(HealthScheduler.name);
@@ -21,6 +30,11 @@ export class HealthScheduler {
     private readonly healthProducer: HealthProducer,
   ) {}
 
+  /**
+   * Runs on the configured cron schedule. Finds all farms belonging to active farmers,
+   * checks each farm's last computed-at time against the farmer's configured interval,
+   * and enqueues stale farms in batches for the `HealthConsumer`.
+   */
   @Cron(process.env.HEALTH_CRON_SCHEDULE ?? '0 */2 * * * *')
   async schedulePendingHealthComputes(): Promise<void> {
     const farms = await this.farmRepo.find({

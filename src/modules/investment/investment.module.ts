@@ -8,9 +8,21 @@ import { InvestmentResolver } from './investment.resolver';
 import { WalletModule } from '../wallet/wallet.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 
+/**
+ * Investment module — manages farm investment plans, investor unit purchases,
+ * and settlement payouts.
+ *
+ * Depends on WalletModule (debit on purchase, credit on settlement) and
+ * NotificationsModule (investor notifications). Exports InvestmentService for
+ * use by other modules that need plan or purchase data.
+ */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([InvestmentPlan, InvestmentPurchase, InvestmentSettlement]),
+    TypeOrmModule.forFeature([
+      InvestmentPlan,
+      InvestmentPurchase,
+      InvestmentSettlement,
+    ]),
     WalletModule,
     NotificationsModule,
   ],

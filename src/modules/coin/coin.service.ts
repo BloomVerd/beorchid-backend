@@ -22,6 +22,23 @@ import { WalletService } from '../wallet/wallet.service';
 import { LedgerAccount } from '../wallet/entities/ledger-entry.entity';
 import { CoinHoldingWithPnl } from './types/coin-holding-with-pnl.type';
 
+/**
+ * Service for crop-backed digital coin trading and position management.
+ *
+ * Trading flow:
+ *  1. Admin creates a coin (DRAFT) and activates it (`updateCoinStatus → ACTIVE`).
+ *  2. Investors call `buy` — wallet is debited into `COIN_POOL`; holding is
+ *     created/updated using VWAP average-cost tracking.
+ *  3. Investors call `sell` — holding is decremented; wallet is credited
+ *     `USER_CASH` at the current coin price.
+ *  4. `recomputePrice` delegates to `CoinPricingService` and persists a new
+ *     `CoinPricePoint`. This is also triggered automatically via the
+ *     `coin-price-recompute` BullMQ queue whenever market prices change.
+ *
+ * All buy/sell operations run inside a TypeORM transaction with pessimistic
+ * write locks on the `Coin` row to prevent race conditions on
+ * `circulatingSupply`.
+ */
 @Injectable()
 export class CoinService {
   constructor(
@@ -37,6 +54,11 @@ export class CoinService {
     private readonly walletService: WalletService,
   ) {}
 
+  /**
+   * Creates a new coin in DRAFT status with default pricing weights if none
+   * are provided. The coin must be activated via `updateCoinStatus` before
+   * trading is possible.
+   */
   async createCoin(input: CreateCoinInput, createdBy: string): Promise<Coin> {
     const coin = this.coinRepo.create({
       ...input,
@@ -53,29 +75,45 @@ export class CoinService {
     return this.coinRepo.save(coin);
   }
 
+  /** Returns all coins ordered by name ascending. */
   listCoins(): Promise<Coin[]> {
     return this.coinRepo.find({ order: { name: 'ASC' } });
   }
 
+  /**
+   * Returns a single coin by ID.
+   *
+   * @throws NotFoundException if the coin does not exist
+   */
   async findCoinById(id: string): Promise<Coin> {
     const coin = await this.coinRepo.findOne({ where: { id } });
     if (!coin) throw new NotFoundException(`Coin ${id} not found`);
     return coin;
   }
 
+  /** Applies a partial update to a coin and returns the updated record. */
   async updateCoin(id: string, data: Partial<Coin>): Promise<Coin> {
     await this.coinRepo.update(id, data);
     return this.findCoinById(id);
   }
 
+  /**
+   * Transitions a coin to a new status (DRAFT → ACTIVE → DELISTED).
+   * Trading requires ACTIVE status; `sell` also works on DELISTED coins.
+   */
   async updateCoinStatus(id: string, status: CoinStatus): Promise<Coin> {
     return this.updateCoin(id, { status });
   }
 
+  /** Delegates to `CoinPricingService.recompute` and returns the new price point. */
   recomputePrice(coinId: string): Promise<CoinPricePoint> {
     return this.pricingService.recompute(coinId);
   }
 
+  /**
+   * Returns price history for a coin with optional date range filtering.
+   * Results are ordered by `computedAt` ascending.
+   */
   getCoinPrices(
     coinId: string,
     from?: Date,
@@ -88,6 +126,18 @@ export class CoinService {
     return this.pointRepo.find({ where, order: { computedAt: 'ASC' } });
   }
 
+  /**
+   * Executes a coin purchase inside a transaction:
+   *  1. Locks the `Coin` row for write.
+   *  2. Debits `grossAmount` (units × currentPrice) from the user's wallet
+   *     into `COIN_POOL`.
+   *  3. Creates or updates the `CoinHolding` using VWAP average-cost blending.
+   *  4. Increments `coin.circulatingSupply`.
+   *  5. Records a `CoinTransaction` (BUY side).
+   *
+   * @throws NotFoundException   if the coin does not exist
+   * @throws BadRequestException if the coin is not ACTIVE
+   */
   async buy(
     coinId: string,
     userId: string,
@@ -155,6 +205,18 @@ export class CoinService {
     });
   }
 
+  /**
+   * Executes a coin sale inside a transaction:
+   *  1. Locks the `Coin` row and `CoinHolding` row for write.
+   *  2. Verifies the user holds sufficient units.
+   *  3. Credits `grossAmount` (units × currentPrice) to the user's wallet
+   *     as `USER_CASH`.
+   *  4. Decrements the holding and `coin.circulatingSupply`.
+   *  5. Records a `CoinTransaction` (SELL side).
+   *
+   * @throws NotFoundException   if the coin does not exist
+   * @throws BadRequestException if the coin is DELISTED or holdings are insufficient
+   */
   async sell(
     coinId: string,
     userId: string,
@@ -218,6 +280,10 @@ export class CoinService {
     });
   }
 
+  /**
+   * Returns all coin holdings for a user enriched with current market value
+   * and unrealised P&L (`currentValue - costBasis`).
+   */
   async myHoldings(userId: string): Promise<CoinHoldingWithPnl[]> {
     const holdings = await this.holdingRepo.find({ where: { userId } });
     const results: CoinHoldingWithPnl[] = [];

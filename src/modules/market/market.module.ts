@@ -9,8 +9,23 @@ import { MarketService } from './market.service';
 import { MarketResolver } from './market.resolver';
 import { MarketSeeder } from './market.seeder';
 
+/**
+ * Market module — provides crop price intelligence including historical price
+ * observations, AI-generated forecasts, and editorial market survey insights.
+ *
+ * Read queries are public. Write mutations require the `super_admin` role.
+ * Exports `MarketService` and `MarketSeeder` for use by other modules.
+ */
 @Module({
-  imports: [TypeOrmModule.forFeature([Crop, MarketPricePoint, PriceForecast, MarketSurveyInsight, Coin])],
+  imports: [
+    TypeOrmModule.forFeature([
+      Crop,
+      MarketPricePoint,
+      PriceForecast,
+      MarketSurveyInsight,
+      Coin,
+    ]),
+  ],
   providers: [MarketService, MarketResolver, MarketSeeder],
   exports: [MarketService, MarketSeeder],
 })

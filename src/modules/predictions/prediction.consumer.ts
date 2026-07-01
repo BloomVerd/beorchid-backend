@@ -73,6 +73,15 @@ interface PredictionApiResponse {
   subplots: SubplotResult[];
 }
 
+/**
+ * BullMQ worker for the `prediction-queue`. Processes `create-predictions` jobs
+ * by calling the external ML API with per-subplot image data, mapping the response
+ * to `Prediction` rows, and dispatching notifications.
+ *
+ * Images used are taken from the current week's `PredictionRange.range_images` if
+ * available; otherwise the farm's full `farm_images` set is used. Old predictions
+ * for the current week are deleted before the new batch is inserted.
+ */
 @Processor('prediction-queue')
 export class PredictionConsumer extends WorkerHost {
   private readonly logger = new Logger(PredictionConsumer.name);
@@ -94,6 +103,7 @@ export class PredictionConsumer extends WorkerHost {
     );
   }
 
+  /** Entry point for BullMQ. Delegates to `computePredictions()` and logs any error. */
   async process(job: Job): Promise<void> {
     if (job.name === 'create-predictions') {
       await this.computePredictions(job.data.farmId).catch((err) =>
@@ -105,6 +115,12 @@ export class PredictionConsumer extends WorkerHost {
     }
   }
 
+  // ── Core computation ─────────────────────────────────────────────────────
+
+  /**
+   * Orchestrates the full prediction pipeline for one farm: image selection,
+   * ML API call, risk level derivation, and `Prediction` row persistence.
+   */
   private async computePredictions(farmId: string): Promise<void> {
     const now = new Date();
     const year = now.getFullYear();
@@ -201,6 +217,9 @@ export class PredictionConsumer extends WorkerHost {
     }
   }
 
+  // ── Notifications ────────────────────────────────────────────────────────
+
+  /** Dispatches in-app / email / SMS notifications after predictions are saved. */
   private async dispatchNotifications(
     farm: Farm,
     records: Prediction[],
@@ -240,6 +259,7 @@ export class PredictionConsumer extends WorkerHost {
     }
   }
 
+  /** Builds a one-sentence notification summary from the risk distribution of predictions. */
   private buildSummary(records: Prediction[]): string {
     const high = records.filter((r) => r.risk_level === RiskLevel.HIGH).length;
     const mod = records.filter(
@@ -252,6 +272,9 @@ export class PredictionConsumer extends WorkerHost {
     return `${parts.join(', ')} prediction(s) detected.`;
   }
 
+  // ── API helpers ──────────────────────────────────────────────────────────
+
+  /** Converts farm + image metadata into the ML API request payload. */
   private buildApiRequest(
     farm: Farm,
     images: ImageData[],
@@ -281,6 +304,10 @@ export class PredictionConsumer extends WorkerHost {
     };
   }
 
+  /**
+   * POSTs the prediction request to the external ML API.
+   * @throws `Error` with status and body on non-2xx responses.
+   */
   private async callPredictionApi(
     payload: PredictionApiRequest,
   ): Promise<PredictionApiResponse> {
@@ -299,17 +326,22 @@ export class PredictionConsumer extends WorkerHost {
     return response.json() as Promise<PredictionApiResponse>;
   }
 
+  // ── Risk derivation ──────────────────────────────────────────────────────
+
+  /** Maps disease prediction result to a `RiskLevel` based on severity and class. */
   private deriveDiseasRiskLevel(disease: DiseaseResult): RiskLevel {
     if (disease.predicted_class === 'healthy') return RiskLevel.LOW;
     return disease.severity >= 0.5 ? RiskLevel.HIGH : RiskLevel.MODERATE;
   }
 
+  /** Maps yield prediction result to a `RiskLevel` based on water stress percentage. */
   private deriveYieldRiskLevel(yieldData: YieldResult): RiskLevel {
     if (yieldData.water_stress_pct < 0.3) return RiskLevel.LOW;
     if (yieldData.water_stress_pct < 0.6) return RiskLevel.MODERATE;
     return RiskLevel.HIGH;
   }
 
+  /** Builds a human-readable description string for a `Prediction` row. */
   private buildDescription(
     predType: PredictionType,
     subplot: SubplotResult,

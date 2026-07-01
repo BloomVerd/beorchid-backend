@@ -62,6 +62,17 @@ const PLANS: Omit<SubscriptionPlan, 'id' | 'createdAt' | 'updatedAt'>[] = [
   },
 ];
 
+/**
+ * Service for seeding and querying the subscription plan catalogue.
+ *
+ * Plan tiers (prices in pesewas):
+ *  - FREE    — 0 GHS, 3 predictions/wk, 2 farms, 1h history
+ *  - POPULAR — 2,000 GHS/yr, 15 predictions/wk, 10 farms, 24h history
+ *  - PREMIUM — 5,000 GHS/yr, 50 predictions/wk, 50 farms, 7-day history
+ *
+ * `setupPlans` is called on application bootstrap to upsert all three plans,
+ * so plan definitions are always in sync with the code constants above.
+ */
 @Injectable()
 export class SubscriptionPlanService {
   constructor(
@@ -69,6 +80,10 @@ export class SubscriptionPlanService {
     private readonly planRepo: Repository<SubscriptionPlan>,
   ) {}
 
+  /**
+   * Upserts all plan definitions into the database. Called on bootstrap to
+   * ensure the plan catalogue is always in sync with the `PLANS` constant.
+   */
   async setupPlans(): Promise<void> {
     for (const plan of PLANS) {
       const existing = await this.planRepo.findOne({
@@ -83,14 +98,17 @@ export class SubscriptionPlanService {
     }
   }
 
+  /** Returns all active subscription plans. */
   async findAll(): Promise<SubscriptionPlan[]> {
     return this.planRepo.find({ where: { isActive: true } });
   }
 
+  /** Returns a single plan by ID, or null if not found. */
   async findById(id: string): Promise<SubscriptionPlan | null> {
     return this.planRepo.findOne({ where: { id } });
   }
 
+  /** Returns a single plan by name (e.g. `PlanName.FREE`), or null if not found. */
   async findByName(name: string): Promise<SubscriptionPlan | null> {
     return this.planRepo.findOne({ where: { name } });
   }

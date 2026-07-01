@@ -11,9 +11,23 @@ import { Farm } from '../farm/entities/farm.entity';
 import { ImageData } from '../farm/entities/image-data.entity';
 import { FarmHealth } from '../health/entities/farm-health.entity';
 
+/**
+ * Marketplace module — exposes GraphQL queries and mutations for farm listing
+ * discovery, offer negotiation, deal creation, and escrow payment settlement.
+ *
+ * Depends on WalletModule (escrow debits/credits) and NotificationsModule
+ * (real-time SSE notifications to buyers and sellers).
+ */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Listing, Offer, Deal, Farm, ImageData, FarmHealth]),
+    TypeOrmModule.forFeature([
+      Listing,
+      Offer,
+      Deal,
+      Farm,
+      ImageData,
+      FarmHealth,
+    ]),
     WalletModule,
     NotificationsModule,
   ],

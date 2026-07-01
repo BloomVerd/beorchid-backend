@@ -3,6 +3,14 @@ import { ConfigService } from '@nestjs/config';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { AuthService } from './auth.service';
 
+/**
+ * REST controller for the Google OAuth 2.0 flow.
+ *
+ * The GraphQL transport cannot handle redirects, so these two endpoints are
+ * exposed as plain HTTP routes. After a successful OAuth callback the user is
+ * redirected to `FRONTEND_URL/auth/callback` with `accessToken` and
+ * `refreshToken` as query parameters.
+ */
 @Controller('v1/auth')
 export class AuthController {
   constructor(
@@ -10,10 +18,15 @@ export class AuthController {
     private readonly configService: ConfigService,
   ) {}
 
+  /** Redirects the browser to the Google OAuth consent screen. */
   @UseGuards(GoogleAuthGuard)
   @Get('google')
   googleLogin() {}
 
+  /**
+   * Google OAuth callback. Upserts the farmer from the Google profile, issues
+   * tokens, and redirects to `FRONTEND_URL/auth/callback?accessToken=…&refreshToken=…`.
+   */
   @UseGuards(GoogleAuthGuard)
   @Get('google/callback')
   // @ts-expect-error express types

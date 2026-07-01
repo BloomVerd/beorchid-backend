@@ -7,6 +7,19 @@ import { InvestmentPlan } from '../investment/entities/investment-plan.entity';
 import { Crop } from '../market/entities/crop.entity';
 import { SearchResults } from './types/search-results.type';
 
+/**
+ * Service for cross-entity full-text search.
+ *
+ * Runs four parallel `ILike` queries across:
+ *  - `Listing`        — crop name, description, region
+ *  - `Coin`           — name, symbol
+ *  - `InvestmentPlan` — title
+ *  - `Crop`           — name, slug
+ *
+ * Queries shorter than 2 characters are rejected early and return empty arrays
+ * to prevent trivial full-table scans. Results per entity are capped at
+ * `min(limit, 20)`.
+ */
 @Injectable()
 export class SearchService {
   constructor(
@@ -16,6 +29,11 @@ export class SearchService {
     @InjectRepository(Crop) private readonly cropRepo: Repository<Crop>,
   ) {}
 
+  /**
+   * Searches all entity types for the given query string. Returns empty arrays
+   * for all types when `query.trim().length < 2`. Results per type are limited
+   * to `min(limit, 20)` (default: 5).
+   */
   async search(query: string, limit = 5): Promise<SearchResults> {
     if (query.trim().length < 2) {
       return { listings: [], coins: [], plans: [], crops: [] };

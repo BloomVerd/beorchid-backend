@@ -90,6 +90,21 @@ interface TelemetryItem {
   temperature?: number;
 }
 
+/**
+ * BullMQ worker for the `health-queue`. Processes `compute-health-batch` jobs
+ * by running `computeFarmHealth()` for each farm ID in parallel (errors per farm
+ * are caught and logged so one failure does not block the rest of the batch).
+ *
+ * Health computation flow per farm:
+ * 1. Gather IoT devices, DynamoDB telemetry, yield comparisons, week predictions,
+ *    and sensor history in parallel.
+ * 2. Run an LLM tool loop (up to 5 rounds) with a `trigger_iot_device` tool that
+ *    notifies the farmer of recommended actions without triggering them directly.
+ * 3. Parse the structured `HealthJson` response (with a JSON-only retry on parse failure).
+ * 4. Persist `FarmHealth` + all sub-entities in parallel.
+ * 5. Update IoT device online/offline status based on recent telemetry.
+ * 6. Dispatch health alert notifications per farmer settings.
+ */
 @Processor('health-queue')
 export class HealthConsumer extends WorkerHost {
   private readonly logger = new Logger(HealthConsumer.name);
@@ -127,6 +142,7 @@ export class HealthConsumer extends WorkerHost {
     this.dynamodb = createDynamoDBClient(this.configService);
   }
 
+  /** Entry point for BullMQ. Fans out health computation to each farm ID in the batch. */
   async process(job: Job): Promise<void> {
     if (job.name !== 'compute-health-batch') return;
     const { farmIds } = job.data as { farmIds: string[] };
@@ -139,6 +155,9 @@ export class HealthConsumer extends WorkerHost {
     );
   }
 
+  // ── Per-farm computation ─────────────────────────────────────────────────
+
+  /** Runs the full LLM-based health computation pipeline for a single farm. */
   private async computeFarmHealth(farmId: string): Promise<void> {
     const now = new Date();
     const dayOfWeek = now.getDay();
@@ -410,6 +429,12 @@ export class HealthConsumer extends WorkerHost {
     );
   }
 
+  // ── Notifications ────────────────────────────────────────────────────────
+
+  /**
+   * Sends in-app, email, and SMS notifications when the computed health contains
+   * CRITICAL / WARNING alerts or disease alerts. Respects farmer notification settings.
+   */
   private async dispatchHealthNotifications(
     farm: Farm | null,
     settings: Awaited<ReturnType<FarmerSettingsService['getOrCreate']>> | null,
@@ -460,6 +485,7 @@ export class HealthConsumer extends WorkerHost {
     }
   }
 
+  /** Builds a short notification summary from the health scores and alert counts. */
   private buildHealthSummary(
     health: FarmHealth,
     diseaseAlerts: NonNullable<HealthJson['disease_alerts']>,
@@ -482,6 +508,9 @@ export class HealthConsumer extends WorkerHost {
     return parts.join(' ');
   }
 
+  // ── Data helpers ─────────────────────────────────────────────────────────
+
+  /** Queries the DynamoDB `farm_telemetry` table for sensor readings within the lookback window. */
   private async queryTelemetry(
     farmId: string,
     lookbackSeconds: number,
@@ -500,6 +529,7 @@ export class HealthConsumer extends WorkerHost {
     return (result.Items ?? []) as TelemetryItem[];
   }
 
+  /** Assembles the plain-text context block fed to the LLM (farm metadata + all data sources). */
   private buildContext(
     farm: Farm | null,
     iotDevices: IotDevice[],
@@ -583,6 +613,13 @@ export class HealthConsumer extends WorkerHost {
     return parts.join('\n');
   }
 
+  // ── LLM configuration ────────────────────────────────────────────────────
+
+  /**
+   * Returns the `trigger_iot_device` tool definition for the health LLM loop.
+   * The tool notifies the farmer of a recommended device action but does NOT
+   * trigger the device directly.
+   */
   private buildIotDeviceTool(): OpenAI.Chat.Completions.ChatCompletionTool {
     return {
       type: 'function',
@@ -615,6 +652,7 @@ export class HealthConsumer extends WorkerHost {
     };
   }
 
+  /** Returns the system prompt that instructs the LLM to output a structured `HealthJson` object. */
   private buildSystemPrompt(): string {
     return `You are an agricultural health analyst. Given raw farm telemetry, weekly AI predictions, and historical sensor data, produce a structured health assessment.
 
@@ -690,6 +728,7 @@ Rules:
 - Use the trigger_iot_device tool before finalising your assessment when conditions warrant device action (e.g. soil moisture critically low → IRRIGATE, high disease probability → CAPTURE_IMAGE). Only recommend active devices. This notifies the farmer — it does not trigger the device directly.`;
   }
 
+  /** Strips markdown fences and extracts the first `{…}` JSON object from the LLM response. */
   private extractJson(text: string): string {
     const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (fenceMatch) return fenceMatch[1].trim();

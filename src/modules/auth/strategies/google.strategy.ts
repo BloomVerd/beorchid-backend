@@ -4,6 +4,13 @@ import { PassportStrategy } from '@nestjs/passport';
 // @ts-expect-error no types
 import { Strategy, VerifyCallback } from 'passport-google-oauth20';
 
+/**
+ * Passport strategy for Google OAuth 2.0 (`passport-google-oauth20`).
+ * Reads `GOOGLE_CLIENT_ID`, `GOOGLE_SECRET`, and `GOOGLE_CALLBACK_URL` from
+ * the environment. On successful authentication it normalises the Google profile
+ * into a plain object (`email`, `firstName`, `lastName`, `googleId`) which is
+ * attached to `req.user` for the callback controller to consume.
+ */
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy) {
   constructor(configService: ConfigService) {
@@ -15,6 +22,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy) {
     });
   }
 
+  /** Extracts email, name, and Google ID from the OAuth profile and passes them to `done`. */
   async validate(
     _accessToken: string,
     _refreshToken: string,
