@@ -13,7 +13,7 @@ const BATCH_SIZE = 50;
  * Cron-based scheduler that determines which farms need a fresh health computation
  * and enqueues them in batches of up to 50.
  *
- * The cron schedule defaults to `0 */2 * * * *` (every 2 minutes) but can be
+ * The cron schedule defaults to (every 2 minutes) but can be
  * overridden via `HEALTH_CRON_SCHEDULE`. Actual per-farm frequency is governed by
  * `FarmerSettings.healthReportIntervalSeconds` — a farm is skipped if its last
  * computation is still within the interval.
