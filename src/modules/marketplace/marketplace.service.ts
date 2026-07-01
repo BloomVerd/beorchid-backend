@@ -264,8 +264,18 @@ export class MarketplaceService {
    * Both the seller and buyer are notified via SSE. Only the party that did NOT
    * create the offer may accept it (`createdById` guard).
    *
+   * If the escrow debit fails because the buyer's balance is insufficient and
+   * the *seller* is the one accepting, the raw wallet error is not surfaced to
+   * them (it would wrongly imply the seller is being charged, and would let
+   * them probe the buyer's balance). Instead the buyer is notified
+   * (`DEAL_PAYMENT_REQUIRED`) that the seller tried to accept but their wallet
+   * needs topping up, and the seller receives a generic retry error. When the
+   * *buyer* is the one accepting (e.g. accepting a seller's counter-offer),
+   * the original `Insufficient balance` error is rethrown as-is.
+   *
    * @throws NotFoundException   if the offer or listing does not exist
-   * @throws BadRequestException if the offer is not PENDING
+   * @throws BadRequestException if the offer is not PENDING, or if the escrow
+   *                             debit fails (insufficient balance)
    * @throws ForbiddenException  if the actor is unrelated to the offer, or is
    *                             accepting their own offer
    */
@@ -323,13 +333,33 @@ export class MarketplaceService {
         offer.buyerId,
       );
       const txnId = crypto.randomUUID();
-      await this.walletService.debit(
-        buyerWallet.id,
-        offer.amount,
-        LedgerAccount.ESCROW,
-        txnId,
-        em,
-      );
+      try {
+        await this.walletService.debit(
+          buyerWallet.id,
+          offer.amount,
+          LedgerAccount.ESCROW,
+          txnId,
+          em,
+        );
+      } catch (err) {
+        if (err instanceof BadRequestException && actorId !== offer.buyerId) {
+          // The seller is accepting; don't leak the buyer's wallet balance
+          // or make the seller think they're the one being charged.
+          await this.notificationsProducer.notify(
+            offer.buyerId,
+            {
+              title: 'Action needed: top up your wallet',
+              message: `The seller tried to accept your offer of ${offer.amount / 100} GHS, but your wallet balance was insufficient. Add funds and re-offer to complete the deal.`,
+              type: NotificationType.DEAL_PAYMENT_REQUIRED,
+            },
+            true,
+          );
+          throw new BadRequestException(
+            'This offer cannot be accepted right now. Please try again later.',
+          );
+        }
+        throw err;
+      }
 
       // Create deal
       const deal = await dealRepo.save(

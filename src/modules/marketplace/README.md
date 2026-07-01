@@ -86,6 +86,13 @@ acceptOffer
 
 The seller receives no wallet change at this point. They can see the pending amount by querying their `myDeals` (status `IN_ESCROW`).
 
+**Insufficient buyer balance.** If the escrow debit fails because the buyer can't cover the offer amount, the error shown depends on who called `acceptOffer`:
+
+- **Buyer accepting** (e.g. accepting a seller's counter-offer): the wallet service's `Insufficient balance` error is rethrown as-is — it's their own balance, so there's no ambiguity.
+- **Seller accepting**: the raw balance error is *not* shown to them. Surfacing it would wrongly suggest the seller is being charged, and would let them repeatedly probe the buyer's balance by trial and error. Instead:
+  - The buyer receives a `DEAL_PAYMENT_REQUIRED` notification telling them the seller tried to accept their offer but their wallet needs topping up.
+  - The seller receives a generic "try again later" error with no balance information.
+
 When the buyer confirms delivery:
 
 ```
@@ -108,6 +115,7 @@ All offer events trigger real-time SSE notifications (`pushToStream: true`) via 
 | Counter offer received | Other party | `OFFER_COUNTERED` |
 | Offer accepted | Buyer | `OFFER_ACCEPTED` |
 | Deal in escrow | Farmer (seller) | `DEAL_PAYMENT_REQUIRED` |
+| Seller tried to accept, buyer balance insufficient | Investor (buyer) | `DEAL_PAYMENT_REQUIRED` |
 | Offer rejected | Offer creator | `OFFER_REJECTED` |
 | Deal completed | Farmer (seller) | `DEAL_COMPLETED` |
 

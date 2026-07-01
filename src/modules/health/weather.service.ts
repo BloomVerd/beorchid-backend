@@ -13,6 +13,7 @@ interface OpenMeteoResponse {
   };
 }
 
+/** Maps a WMO weather interpretation code to a human-readable description and icon name. */
 function wmoToDescription(code: number): { description: string; icon: string } {
   if (code === 0) return { description: 'Clear sky', icon: 'sun' };
   if (code <= 2) return { description: 'Partly cloudy', icon: 'cloud-sun' };
@@ -45,8 +46,8 @@ export class WeatherService {
   private readonly baseUrl = 'https://api.open-meteo.com/v1/forecast';
 
   /**
-   * Fetches a 7-day daily weather forecast for the given coordinates.
-   * Returns `[]` if the API is unreachable or returns a non-200 status.
+   * Fetches a 7-day daily forecast for the given coordinates from Open-Meteo.
+   * Returns an empty array on network failure or non-200 responses.
    */
   async getForecast(lat: number, lon: number): Promise<WeatherForecast[]> {
     const params = new URLSearchParams({
