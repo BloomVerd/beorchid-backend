@@ -53,6 +53,10 @@ export class Offer {
   @Column({ type: 'varchar', nullable: true })
   parentOfferId: string | null;
 
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', nullable: true })
+  createdById: string | null;
+
   @Field(() => Date, { nullable: true })
   @Column({ type: 'timestamptz', nullable: true })
   expiresAt: Date | null;

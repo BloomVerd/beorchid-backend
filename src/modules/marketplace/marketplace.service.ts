@@ -25,6 +25,17 @@ import { LedgerAccount } from '../wallet/entities/ledger-entry.entity';
 import { NotificationsProducer } from '../notifications/notifications.producer';
 import { NotificationType } from '../notifications/entities/notification.entity';
 
+/**
+ * Manages the full lifecycle of farm listing offers.
+ *
+ * Offer flow:
+ *  1. Seller creates a Listing (status: OPEN).
+ *  2. Buyer calls makeOffer → Listing moves to UNDER_OFFER.
+ *  3. Seller may: acceptOffer (→ Deal IN_ESCROW), counterOffer, or rejectOffer.
+ *     Buyer may (after a seller counter): acceptOffer, counterOffer, or rejectOffer.
+ *     Neither party may act on an offer they themselves created (createdById).
+ *  4. Buyer calls confirmDealPayment → escrow released to seller as USER_CASH.
+ */
 @Injectable()
 export class MarketplaceService {
   private readonly logger = new Logger(MarketplaceService.name);
@@ -115,6 +126,8 @@ export class MarketplaceService {
     message?: string,
   ): Promise<Offer> {
     const listing = await this.findListingById(listingId);
+    if (listing.sellerId === buyerId)
+      throw new ForbiddenException('Cannot make offer on your own listing');
     if (
       listing.status !== ListingStatus.OPEN &&
       listing.status !== ListingStatus.UNDER_OFFER
@@ -126,6 +139,7 @@ export class MarketplaceService {
       this.offerRepo.create({
         listingId,
         buyerId,
+        createdById: buyerId,
         amount,
         message: message ?? null,
         status: OfferStatus.PENDING,
@@ -139,11 +153,15 @@ export class MarketplaceService {
     }
 
     this.notificationsProducer
-      .notify(listing.sellerId, {
-        title: 'New offer received',
-        message: `You received an offer of ${amount / 100} GHS on your listing`,
-        type: NotificationType.OFFER_RECEIVED,
-      })
+      .notify(
+        listing.sellerId,
+        {
+          title: 'New offer received',
+          message: `You received an offer of ${amount / 100} GHS on your listing`,
+          type: NotificationType.OFFER_RECEIVED,
+        },
+        true,
+      )
       .catch((err) =>
         this.logger.error(
           `Failed to notify seller ${listing.sellerId} of new offer: ${err.message}`,
@@ -168,6 +186,9 @@ export class MarketplaceService {
     if (listing.sellerId !== actorId && original.buyerId !== actorId) {
       throw new ForbiddenException('Not authorised to counter this offer');
     }
+    if (original.createdById === actorId) {
+      throw new ForbiddenException('Cannot counter your own offer');
+    }
 
     original.status = OfferStatus.COUNTERED;
     await this.offerRepo.save(original);
@@ -176,6 +197,7 @@ export class MarketplaceService {
       this.offerRepo.create({
         listingId: original.listingId,
         buyerId: original.buyerId,
+        createdById: actorId,
         amount,
         message: message ?? null,
         parentOfferId: offerId,
@@ -186,11 +208,15 @@ export class MarketplaceService {
 
     const recipientId =
       actorId === listing.sellerId ? original.buyerId : listing.sellerId;
-    await this.notificationsProducer.notify(recipientId, {
-      title: 'Counter offer received',
-      message: `A counter offer of ${amount / 100} GHS was made on your offer`,
-      type: NotificationType.OFFER_COUNTERED,
-    });
+    await this.notificationsProducer.notify(
+      recipientId,
+      {
+        title: 'Counter offer received',
+        message: `A counter offer of ${amount / 100} GHS was made on your offer`,
+        type: NotificationType.OFFER_COUNTERED,
+      },
+      true,
+    );
 
     return counter;
   }
@@ -216,6 +242,9 @@ export class MarketplaceService {
       if (!listing) throw new NotFoundException('Listing not found');
       if (listing.sellerId !== actorId && offer.buyerId !== actorId) {
         throw new ForbiddenException('Not authorised to accept this offer');
+      }
+      if (offer.createdById === actorId) {
+        throw new ForbiddenException('Cannot accept your own offer');
       }
 
       // Accept this offer
@@ -267,34 +296,52 @@ export class MarketplaceService {
         }),
       );
 
-      await this.notificationsProducer.notify(offer.buyerId, {
-        title: 'Offer accepted',
-        message: `Your offer of ${offer.amount / 100} GHS was accepted`,
-        type: NotificationType.OFFER_ACCEPTED,
-      });
-      await this.notificationsProducer.notify(listing.sellerId, {
-        title: 'Deal in escrow',
-        message: `Funds of ${offer.amount / 100} GHS are now held in escrow`,
-        type: NotificationType.DEAL_PAYMENT_REQUIRED,
-      });
+      await this.notificationsProducer.notify(
+        offer.buyerId,
+        {
+          title: 'Offer accepted',
+          message: `Your offer of ${offer.amount / 100} GHS was accepted`,
+          type: NotificationType.OFFER_ACCEPTED,
+        },
+        true,
+      );
+      await this.notificationsProducer.notify(
+        listing.sellerId,
+        {
+          title: 'Deal in escrow',
+          message: `Funds of ${offer.amount / 100} GHS are now held in escrow`,
+          type: NotificationType.DEAL_PAYMENT_REQUIRED,
+        },
+        true,
+      );
 
       return deal;
     });
   }
 
-  async rejectOffer(offerId: string, sellerId: string): Promise<Offer> {
+  async rejectOffer(offerId: string, actorId: string): Promise<Offer> {
     const offer = await this.offerRepo.findOne({ where: { id: offerId } });
     if (!offer) throw new NotFoundException('Offer not found');
     const listing = await this.findListingById(offer.listingId);
-    if (listing.sellerId !== sellerId)
-      throw new ForbiddenException('Not your listing');
+
+    const isSeller = listing.sellerId === actorId;
+    const isBuyer = offer.buyerId === actorId;
+    if (!isSeller && !isBuyer)
+      throw new ForbiddenException('Not authorised to reject this offer');
+    if (offer.createdById === actorId)
+      throw new ForbiddenException('Cannot reject your own offer');
+
     offer.status = OfferStatus.REJECTED;
 
-    await this.notificationsProducer.notify(offer.buyerId, {
-      title: 'Offer rejected',
-      message: 'Your offer was rejected',
-      type: NotificationType.OFFER_REJECTED,
-    });
+    await this.notificationsProducer.notify(
+      offer.createdById ?? offer.buyerId,
+      {
+        title: 'Offer rejected',
+        message: 'Your offer was rejected',
+        type: NotificationType.OFFER_REJECTED,
+      },
+      true,
+    );
 
     return this.offerRepo.save(offer);
   }
@@ -347,7 +394,9 @@ export class MarketplaceService {
       const result = await dealRepo.save(deal);
 
       // Release escrow to seller
-      const sellerWallet = await this.walletService.getOrCreateWallet(deal.sellerId);
+      const sellerWallet = await this.walletService.getOrCreateWallet(
+        deal.sellerId,
+      );
       const txnId = crypto.randomUUID();
       await this.walletService.credit(
         sellerWallet.id,
@@ -360,11 +409,15 @@ export class MarketplaceService {
       return result;
     });
 
-    await this.notificationsProducer.notify(saved.sellerId, {
-      title: 'Deal completed',
-      message: `Payment of ${saved.amount / 100} GHS has been released to your wallet`,
-      type: NotificationType.DEAL_COMPLETED,
-    });
+    await this.notificationsProducer.notify(
+      saved.sellerId,
+      {
+        title: 'Deal completed',
+        message: `Payment of ${saved.amount / 100} GHS has been released to your wallet`,
+        type: NotificationType.DEAL_COMPLETED,
+      },
+      true,
+    );
 
     return saved;
   }

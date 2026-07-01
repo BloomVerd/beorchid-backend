@@ -161,6 +161,8 @@ export class MarketplaceResolver {
   }
 
   @Mutation(() => Offer)
+  @UseGuards(RolesGuard)
+  @Roles('farmer', 'individual', 'company', 'super_admin')
   counterOffer(
     @Args('offerId', { type: () => ID }) offerId: string,
     @Args('amount', { type: () => Number }) amount: number,
@@ -177,6 +179,8 @@ export class MarketplaceResolver {
   }
 
   @Mutation(() => Deal)
+  @UseGuards(RolesGuard)
+  @Roles('farmer', 'individual', 'company', 'super_admin')
   acceptOffer(
     @Args('offerId', { type: () => ID }) offerId: string,
     @CurrentFarmer() user: Farmer,
@@ -186,7 +190,7 @@ export class MarketplaceResolver {
 
   @Mutation(() => Offer)
   @UseGuards(RolesGuard)
-  @Roles('farmer', 'super_admin')
+  @Roles('farmer', 'individual', 'company', 'super_admin')
   rejectOffer(
     @Args('offerId', { type: () => ID }) offerId: string,
     @CurrentFarmer() user: Farmer,
